@@ -135,7 +135,7 @@ if __name__ == "__main__":
      # prepare training & testing data
     transform = transforms.Compose(
     [
-        transforms.Resize((32, 32)),
+        # transforms.Resize((32, 32)),
         transforms.ToTensor()
     # ,transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     classes = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     
     
-    net = models.LeNet5(10, input_channel=1)
+    net = models.LeNet(10, input_channel=1)
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     optimizer = optim.SGD(params=net.parameters(), lr=args.lr, momentum=args.momentum)
 

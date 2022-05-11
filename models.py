@@ -1,3 +1,4 @@
+from matplotlib.cbook import flatten
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,4 +52,30 @@ class LeNet5(nn.Module):
         # probs = F.softmax(logits, dim=1)
         return logits
 
+class LeNet(nn.Module):
+    def __init__(self, n_classes, input_channel=1):
+        super(LeNet, self).__init__()
+        
+        self.feature_extractor = nn.Sequential(            
+            nn.Conv2d(in_channels=input_channel, out_channels=16, kernel_size=8, stride=2, padding=3),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=1),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=1)
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=512, out_features=32),
+            nn.ReLU(),
+            nn.Linear(in_features=32, out_features=n_classes),
+        )
+
+
+    def forward(self, x):
+        x = self.feature_extractor(x)
+        x = torch.flatten(x, 1)
+        logits = self.classifier(x)
+        # probs = F.softmax(logits, dim=1)
+        return logits
 

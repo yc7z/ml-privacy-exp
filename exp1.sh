@@ -8,7 +8,7 @@ fi
 python ./run.py \
     --lr 0.004 \
     --batch_size 500 \
-    --epochs 3 \
+    --epochs 10 \
     --momentum 0.9 \
     --max_grad_norm 1.0 \
     --weights_path ./saved_weights/mnist_LeNet_private.pth 
