@@ -29,6 +29,8 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
         running_loss = 0.0
         for i, data in enumerate(trainloader):
             inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
             tic = time.perf_counter()
             # start to monitor function call
@@ -53,7 +55,7 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
     print('weights saved.')
 
 
-def eval_classifier(model, weights_path, testloader, classes):
+def eval_classifier(model, weights_path, testloader, classes, device):
     """
         Load pretrained weights and evaluate model performance.
     """
@@ -64,6 +66,9 @@ def eval_classifier(model, weights_path, testloader, classes):
     with torch.no_grad():
         for data in testloader:
             images, true_labels = data
+            images = images.to(device)
+            true_labels = true_labels.to(device)
+
             logits = model(images)
             predictions = torch.argmax(logits, dim=1)
             for label, prediction in zip(true_labels, predictions):
