@@ -20,20 +20,29 @@ timing = []
 
 
 
-def train_vanilla(args, model, trainloader, criterion, optimizer):
+def train_vanilla(args, model, trainloader, criterion, optimizer, device):
     """
         Train model without any privacy mechanisms.
     """
+    pr = cProfile.Profile()
     for epoch in range(args.epochs):
         running_loss = 0.0
         for i, data in enumerate(trainloader):
             inputs, labels = data
+
+            tic = time.perf_counter()
+            # start to monitor function call
+            pr.enable()
             outputs = model(inputs)
 
             optimizer.zero_grad()
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+
+            pr.disable()
+            toc = time.perf_counter()
+            timing.append(toc - tic)
 
             running_loss += loss
             if i % 2000 == 1999:    # print every 2000 mini-batches
@@ -73,7 +82,7 @@ def eval_classifier(model, weights_path, testloader, classes):
     print(f'Accuracy of the network on the 10000 test images: {100 * total_correct / total:2f} %')
 
 
-def train_private(args, model, trainloader, criterion, optimizer):
+def train_private(args, model, trainloader, criterion, optimizer, device):
     """
     Train model in a differentially private manner by clipping the gradients and adding Gaussian noises.
     """
@@ -85,6 +94,8 @@ def train_private(args, model, trainloader, criterion, optimizer):
     for epoch in range(args.epochs):
         for _, data in enumerate(trainloader):
             inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
 
             tic = time.perf_counter()
             # start to monitor function call
@@ -106,11 +117,23 @@ def train_private(args, model, trainloader, criterion, optimizer):
             sortby = SortKey.CUMULATIVE
             ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
             ps.print_stats()
+            pr.dump_stats("PytorchPrivateTiming,train_size=" + str(60000) + ".prof")
 
             # 3. update model parameters with gradients
             with torch.no_grad():
                 for param, grad_p in zip(model.parameters(), grads):
                     param -= args.lr * torch.mean(grad_p, dim=0)
+            
+            # pr.disable()
+            # toc = time.perf_counter()
+            # timing.append(toc - tic)
+
+            # s = io.StringIO()
+            # sortby = SortKey.CUMULATIVE
+            # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            # ps.print_stats()
+            # pr.dump_stats("Private,flameresult,batch=" + str(120) + ".prof")
+
     
         print(f'epoch {epoch + 1} finished.')
     print('finished training.')
@@ -153,26 +176,33 @@ if __name__ == "__main__":
     # classes = ('plane', 'car', 'bird', 'cat',
     #         'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
     classes = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+    USE_CUDA = torch.cuda.is_available()
+    device = torch.device("cuda" if USE_CUDA else "cpu")
     
     
     net = models.LeNet(10, input_channel=1)
+    net.to(device)
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     optimizer = optim.SGD(params=net.parameters(), lr=args.lr, momentum=args.momentum)
 
-    train_private(args, net, trainloader, criterion, optimizer)
-
-    # train_vanilla(args, net, trainloader, criterion, optimizer)
-
     total_size = len(trainloader.dataset)
-    step = int(total_size / args.batch_size)
+
+    train_private(args, net, trainloader, criterion, optimizer, device)
+
+    # train_vanilla(args, net, trainloader, criterion, optimizer, device)
+
+    # total_size = len(trainloader.dataset)
+    # step = int(total_size / args.batch_size)
     print(f'raw timing info: {timing}')
-    timing_steps = [sum(timing[i:i+step]) for i in range(0, len(timing), step)]
-    print(f'time taken to process each epoch: {timing_steps}')
-    print(f'average time taken on each epoch: {sum(timing_steps) / len(timing_steps)}')
+    # timing_steps = [sum(timing[i:i+step]) for i in range(0, len(timing), step)]
+    print(f'number of epochs: {args.epochs}, total training time: {sum(timing)}, dataset size: {total_size}')
+    # print(f'time taken to process each epoch: {timing_steps}')
+    # print(f'average time taken on each epoch: {sum(timing_steps) / len(timing_steps)}')
 
-    filename = "PrivateTiming,num_microbatch=" + str(step)
-    print("Private batch training time when batch = " + str(args.batch_size) + " is ", np.mean(timing))
+    print("Average private training time per batch when batch = " + str(args.batch_size) + " is ", np.mean(timing))
 
+    filename = "PytorchPrivateTiming,batch_size=" + str(args.batch_size)
     with open(filename, "wb") as dill_file:
         dill.dump(timing, dill_file)
 
