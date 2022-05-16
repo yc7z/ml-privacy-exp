@@ -96,7 +96,7 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
     # Profiler for Tensorboard
     # active records the rounds 
     prof = torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=5, repeat=1),
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=1, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/tensorboard1'),
         record_shapes=True,
         with_stack=True)
@@ -105,6 +105,7 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
     ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
     
     for epoch in range(args.epochs):
+        prof.start()
         for _, data in enumerate(trainloader):
             inputs, targets = data
             inputs = inputs.to(device)
@@ -114,7 +115,6 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
             # start to monitor function call
             # pr.enable()
             # start to monitor function call for tensorboard
-            prof.start()
 
             # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
             fmodel, params, buffers = make_functional_with_buffers(model)
@@ -126,15 +126,16 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
 
             # stop to record the profiling
             # pr.disable()
-            prof.stop()
-            toc = time.perf_counter()
-            timing.append(toc - tic)
+            prof.step()
+            
+            # toc = time.perf_counter()
+            # timing.append(toc - tic)
 
-            s = io.StringIO()
-            sortby = SortKey.CUMULATIVE
-            ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-            ps.print_stats()
-            pr.dump_stats("PytorchPrivateTiming,train_size=" + str(60000) + ".prof")
+            # s = io.StringIO()
+            # sortby = SortKey.CUMULATIVE
+            # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            # ps.print_stats()
+            # pr.dump_stats("PytorchPrivateTiming,train_size=" + str(60000) + ".prof")
 
             # 3. update model parameters with gradients
             with torch.no_grad():
@@ -150,6 +151,8 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
             # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
             # ps.print_stats()
             # pr.dump_stats("Private,flameresult,batch=" + str(120) + ".prof")
+        
+        prof.stop()
 
     
         print(f'epoch {epoch + 1} finished.')
@@ -211,16 +214,16 @@ if __name__ == "__main__":
 
     # total_size = len(trainloader.dataset)
     # step = int(total_size / args.batch_size)
-    print(f'raw timing info: {timing}')
-    # timing_steps = [sum(timing[i:i+step]) for i in range(0, len(timing), step)]
-    print(f'number of epochs: {args.epochs}, total training time: {sum(timing)}, dataset size: {total_size}')
-    # print(f'time taken to process each epoch: {timing_steps}')
-    # print(f'average time taken on each epoch: {sum(timing_steps) / len(timing_steps)}')
+    # print(f'raw timing info: {timing}')
+    # # timing_steps = [sum(timing[i:i+step]) for i in range(0, len(timing), step)]
+    # print(f'number of epochs: {args.epochs}, total training time: {sum(timing)}, dataset size: {total_size}')
+    # # print(f'time taken to process each epoch: {timing_steps}')
+    # # print(f'average time taken on each epoch: {sum(timing_steps) / len(timing_steps)}')
 
-    print("Average private training time per batch when batch = " + str(args.batch_size) + " is ", np.mean(timing))
+    # print("Average private training time per batch when batch = " + str(args.batch_size) + " is ", np.mean(timing))
 
-    filename = "PytorchPrivateTiming,batch_size=" + str(args.batch_size)
-    with open(filename, "wb") as dill_file:
-        dill.dump(timing, dill_file)
+    # filename = "PytorchPrivateTiming,batch_size=" + str(args.batch_size)
+    # with open(filename, "wb") as dill_file:
+    #     dill.dump(timing, dill_file)
 
-    eval_classifier(net, args.weights_path, testloader, classes)
+    eval_classifier(net, args.weights_path, testloader, classes, device)
