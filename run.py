@@ -91,7 +91,15 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
     """
     Train model in a differentially private manner by clipping the gradients and adding Gaussian noises.
     """
+    # Build-in Python Profiler
     pr = cProfile.Profile()
+    # Profiler for Tensorboard
+    # active records the rounds 
+    prof = torch.profiler.profile(
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=5, repeat=1),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/tensorboard1'),
+        record_shapes=True,
+        with_stack=True)
 
     ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
     ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
@@ -104,7 +112,9 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
 
             tic = time.perf_counter()
             # start to monitor function call
-            pr.enable()
+            # pr.enable()
+            # start to monitor function call for tensorboard
+            prof.start()
 
             # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
             fmodel, params, buffers = make_functional_with_buffers(model)
@@ -114,7 +124,9 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
             grads = batch_clip(grads, args.max_grad_norm)
             grads = batch_noising(grads, args.max_grad_norm)
 
-            pr.disable()
+            # stop to record the profiling
+            # pr.disable()
+            prof.stop()
             toc = time.perf_counter()
             timing.append(toc - tic)
 
