@@ -32,19 +32,26 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
             inputs = inputs.to(device)
             labels = labels.to(device)
 
-            tic = time.perf_counter()
-            # start to monitor function call
-            pr.enable()
+            # tic = time.perf_counter()
+            # # start to monitor function call
+            # pr.enable()
             outputs = model(inputs)
 
             optimizer.zero_grad()
             loss = criterion(outputs, labels)
+
+            pr.enable()
+            tic = time.perf_counter()
+            # start to monitor function call
             loss.backward()
+            toc = time.perf_counter()
+            pr.disable()
+            timing.append(toc - tic)
+
             optimizer.step()
 
-            pr.disable()
-            toc = time.perf_counter()
-            timing.append(toc - tic)
+            # pr.disable()
+            # toc = time.perf_counter()
 
             running_loss += loss
             if i % 2000 == 1999:    # print every 2000 mini-batches
@@ -183,19 +190,26 @@ def train_opacus(args, model, train_loader, criterion, optimizer, device):
             inputs = inputs.to(device)
             targets = targets.to(device)
 
-            tic = time.perf_counter()
-            pr.enable()
+            # tic = time.perf_counter()
+            # pr.enable()
 
             outputs = model(inputs)
 
             optimizer.zero_grad()
             loss = criterion(outputs, targets)
+
+            pr.enable()
+            tic = time.perf_counter()
             loss.backward()
+            toc = time.perf_counter()
+            pr.disable()
+            timing_opacus.append(toc - tic)
+
             optimizer.step()
 
-            pr.disable()
-            toc = time.perf_counter()
-            timing_opacus.append(toc - tic)
+            # pr.disable()
+            # toc = time.perf_counter()
+            
 
             running_loss += loss
             if i % 2000 == 1999:    # print every 2000 mini-batches
@@ -260,16 +274,16 @@ if __name__ == "__main__":
         train_vanilla(args, net, trainloader, criterion, optimizer, device)
         # print(f'raw timing info: {timing}')
         print(f'number of epochs: {args.epochs}, total training time: {sum(timing)}, dataset size: {total_size}')
-        print(f'average time taken on each epoch: {sum(timing) / len(timing)} (vanilla)')
+        print(f'average time taken on each batch: {sum(timing) / len(timing)} (vanilla)')
     elif args.version == 'private':
         train_private(args, net, trainloader, criterion, optimizer, device)
         print(f'number of epochs: {args.epochs}, total training time: {sum(timing_private)}, dataset size: {total_size}')
-        print(f'average time taken on each epoch: {sum(timing_private) / len(timing_private)} (private)')
+        print(f'average time taken on each batch: {sum(timing_private) / len(timing_private)} (private)')
     elif args.version == 'opacus':
         train_opacus(args, net, trainloader, criterion, optimizer, device)
         # print(f'raw timing info: {timing_opacus}')
         print(f'number of epochs: {args.epochs}, total training time: {sum(timing_opacus)}, dataset size: {total_size}')
-        print(f'average time taken on each epoch: {sum(timing_opacus) / len(timing_opacus)} (opacus)')
+        print(f'average time taken on each batch: {sum(timing_opacus) / len(timing_opacus)} (opacus)')
 
     # train_vanilla(args, net, trainloader, criterion, optimizer, device)
 
