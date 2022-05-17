@@ -10,14 +10,14 @@ from functorch import make_functional_with_buffers, vmap, grad
 from privacymech import *
 import dill
 import numpy as np
-
 import time
-
 import cProfile, pstats, io
 from pstats import SortKey
+from opacus import PrivacyEngine
 
 timing = []
-
+timing_opacus = []
+timing_private = []
 
 
 def train_vanilla(args, model, trainloader, criterion, optimizer, device):
@@ -93,19 +93,20 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
     """
     # Build-in Python Profiler
     pr = cProfile.Profile()
+
     # Profiler for Tensorboard
     # active records the rounds 
-    prof = torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=1, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/tensorboard1'),
-        record_shapes=True,
-        with_stack=True)
+    # prof = torch.profiler.profile(
+    #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=1, repeat=1),
+    #     on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/tensorboard1'),
+    #     record_shapes=True,
+    #     with_stack=True)
 
     ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
     ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
     
     for epoch in range(args.epochs):
-        prof.start()
+        # prof.start()
         for _, data in enumerate(trainloader):
             inputs, targets = data
             inputs = inputs.to(device)
@@ -113,7 +114,7 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
 
             tic = time.perf_counter()
             # start to monitor function call
-            # pr.enable()
+            pr.enable()
             # start to monitor function call for tensorboard
 
             # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
@@ -126,10 +127,10 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
 
             # stop to record the profiling
             # pr.disable()
-            prof.step()
+            # prof.step()
             
             # toc = time.perf_counter()
-            # timing.append(toc - tic)
+            # timing_private.append(toc - tic)
 
             # s = io.StringIO()
             # sortby = SortKey.CUMULATIVE
@@ -142,9 +143,9 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
                 for param, grad_p in zip(model.parameters(), grads):
                     param -= args.lr * torch.mean(grad_p, dim=0)
             
-            # pr.disable()
-            # toc = time.perf_counter()
-            # timing.append(toc - tic)
+            pr.disable()
+            toc = time.perf_counter()
+            timing_private.append(toc - tic)
 
             # s = io.StringIO()
             # sortby = SortKey.CUMULATIVE
@@ -152,14 +153,57 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
             # ps.print_stats()
             # pr.dump_stats("Private,flameresult,batch=" + str(120) + ".prof")
         
-        prof.stop()
+        # prof.stop()
 
     
         print(f'epoch {epoch + 1} finished.')
     print('finished training.')
-    torch.save(model.state_dict(), args.weights_path)
-           
-                
+    # torch.save(model.state_dict(), args.weights_path)
+
+
+def train_opacus(args, model, train_loader, criterion, optimizer, device):
+    privacy_engine = PrivacyEngine()
+
+    model, optimizer, train_loader = privacy_engine.make_private_with_epsilon(
+    module=model,
+    optimizer=optimizer,
+    data_loader=train_loader,
+    epochs=args.epochs,
+    target_epsilon=args.epsilon,
+    target_delta=args.delta,
+    max_grad_norm=args.max_grad_norm,
+    )
+
+    pr = cProfile.Profile()
+
+    for epoch in range(1, args.epochs + 1):
+        running_loss = 0.0
+        for i, data in enumerate(train_loader):
+            inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            tic = time.perf_counter()
+            pr.enable()
+
+            outputs = model(inputs)
+
+            optimizer.zero_grad()
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+
+            pr.disable()
+            toc = time.perf_counter()
+            timing_opacus.append(toc - tic)
+
+            running_loss += loss
+            if i % 2000 == 1999:    # print every 2000 mini-batches
+                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+        print(f'finished epoch {epoch}')
+    print(f'finished opacus training.')
+
+
 if __name__ == "__main__":
 
     # command line arguments for training. mainly hyperparameters
@@ -172,6 +216,10 @@ if __name__ == "__main__":
     parser.add_argument('--max_grad_norm', type=float, default=1.0)
     parser.add_argument('--weights_path', type=str, default='./saved_weights/cifar_LeNet.pth')
     parser.add_argument('--noise_multiplier', type=float, default=0.3)
+    parser.add_argument('--epsilon', type=float, default=0.1)
+    parser.add_argument('--delta', type=float, default=0.1)
+    parser.add_argument('--version', type=str, default='vanilla')
+    parser.add_argument('--eval', type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -208,7 +256,20 @@ if __name__ == "__main__":
 
     total_size = len(trainloader.dataset)
 
-    train_private(args, net, trainloader, criterion, optimizer, device)
+    if args.version == 'vanilla':
+        train_vanilla(args, net, trainloader, criterion, optimizer, device)
+        # print(f'raw timing info: {timing}')
+        print(f'number of epochs: {args.epochs}, total training time: {sum(timing)}, dataset size: {total_size}')
+        print(f'average time taken on each epoch: {sum(timing) / len(timing)} (vanilla)')
+    elif args.version == 'private':
+        train_private(args, net, trainloader, criterion, optimizer, device)
+        print(f'number of epochs: {args.epochs}, total training time: {sum(timing_private)}, dataset size: {total_size}')
+        print(f'average time taken on each epoch: {sum(timing_private) / len(timing_private)} (private)')
+    elif args.version == 'opacus':
+        train_opacus(args, net, trainloader, criterion, optimizer, device)
+        # print(f'raw timing info: {timing_opacus}')
+        print(f'number of epochs: {args.epochs}, total training time: {sum(timing_opacus)}, dataset size: {total_size}')
+        print(f'average time taken on each epoch: {sum(timing_opacus) / len(timing_opacus)} (opacus)')
 
     # train_vanilla(args, net, trainloader, criterion, optimizer, device)
 
@@ -226,4 +287,5 @@ if __name__ == "__main__":
     # with open(filename, "wb") as dill_file:
     #     dill.dump(timing, dill_file)
 
-    eval_classifier(net, args.weights_path, testloader, classes, device)
+    if args.eval:
+        eval_classifier(net, args.weights_path, testloader, classes, device)
