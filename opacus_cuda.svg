@@ -1,0 +1,98 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="216"
+     xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+    .func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<svg class="func_g" x="0.0" y="72" width="1198.354188381859" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/_tensor.py:307:backward 99.95% (600 600 0.0030573510000000003 1.3632073550000001)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 190, 110)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="0.0" y="48" width="1195.5503541326636" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:85:backward 99.71% (600 600 0.0030852930000000002 1.360020467)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 240, 141)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="0.0" y="24" width="13.073946033382212" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:30:_make_grads 1.17% (600 600 0.003725496 0.015996698)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 215, 125)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">_make_grads</text>
+</g></svg>
+<svg class="func_g" x="0.10686441545616082" y="0" width="9.291556837534388" height="23"><g>
+    <title>~:0:&lt;built-in method ones_like&gt; 0.86% (600 600 0.011697567 0.011697567)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 140, 79)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">&lt;built-in method ones_like&gt;</text>
+</g></svg>
+<svg class="func_g" x="15.079129103579167" y="24" width="1177.756774385635" height="23"><g>
+    <title>~:0:&lt;method 'run_backward' of 'torch._C._EngineBase' objects&gt; 98.23% (600 600 1.3397959670000001 1.3397959670000001)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 190, 110)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">&lt;method 'run_backward' of 'torch._C._EngineBase' objects&gt;</text>
+</g></svg>
+<svg class="func_g" x="0.0" y="120" width="1.689867182533992" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/_tensor.py:307:backward 0.22% (600 600 0.0030573510000000003 1.3632073550000001)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 190, 110)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="2.689867182533992" y="120" width="2.277703289240148" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:30:_make_grads 0.27% (600 600 0.003725496 0.015996698)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 215, 125)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">_make_grads</text>
+</g></svg>
+<svg class="func_g" x="2.689867182533992" y="144" width="2.277703289240148" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:85:backward 0.27% (600 600 0.003725496 0.015996698)</title>
+    <rect height="100%" width="100%" fill="rgb(190, 190, 190)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="2.689867182533992" y="168" width="2.277703289240148" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/_tensor.py:307:backward 0.23% (600 600 0.0030852930000000002 1.360020467)</title>
+    <rect height="100%" width="100%" fill="rgb(204, 204, 204)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="6.312250970055607" y="120" width="1.7144506434497861" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:85:backward 0.23% (600 600 0.0030852930000000002 1.360020467)</title>
+    <rect height="100%" width="100%" fill="rgb(255, 240, 141)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="6.312250970055607" y="144" width="1.7144506434497861" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/_tensor.py:307:backward 0.23% (600 600 0.0030852930000000002 1.360020467)</title>
+    <rect height="100%" width="100%" fill="rgb(204, 204, 204)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="9.794068600877042" y="120" width="9.291556837534388" height="23"><g>
+    <title>~:0:&lt;built-in method ones_like&gt; 0.86% (600 600 0.011697567 0.011697567)</title>
+    <rect height="100%" width="100%" fill="rgb(182, 182, 255)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">&lt;built-in method ones_like&gt;</text>
+</g></svg>
+<svg class="func_g" x="9.794068600877042" y="144" width="9.291556837534388" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:30:_make_grads 0.86% (600 600 0.011697567 0.011697567)</title>
+    <rect height="100%" width="100%" fill="rgb(197, 197, 197)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">_make_grads</text>
+</g></svg>
+<svg class="func_g" x="9.794068600877042" y="168" width="9.291556837534388" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:85:backward 0.27% (600 600 0.003725496 0.015996698)</title>
+    <rect height="100%" width="100%" fill="rgb(190, 190, 190)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="9.794068600877042" y="192" width="9.291556837534388" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/_tensor.py:307:backward 0.23% (600 600 0.0030852930000000002 1.360020467)</title>
+    <rect height="100%" width="100%" fill="rgb(204, 204, 204)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="21.243225614365034" y="120" width="1177.756774385635" height="23"><g>
+    <title>~:0:&lt;method 'run_backward' of 'torch._C._EngineBase' objects&gt; 98.23% (600 600 1.3397959670000001 1.3397959670000001)</title>
+    <rect height="100%" width="100%" fill="rgb(214, 214, 255)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">&lt;method 'run_backward' of 'torch._C._EngineBase' objects&gt;</text>
+</g></svg>
+<svg class="func_g" x="21.243225614365034" y="144" width="1177.756774385635" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/autograd/__init__.py:85:backward 98.23% (600 600 1.3397959670000001 1.3397959670000001)</title>
+    <rect height="100%" width="100%" fill="rgb(190, 190, 190)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+<svg class="func_g" x="21.243225614365034" y="168" width="1177.756774385635" height="23"><g>
+    <title>/home/y.zhang/venvs/privacyml/lib/python3.8/site-packages/torch/_tensor.py:307:backward 0.23% (600 600 0.0030852930000000002 1.360020467)</title>
+    <rect height="100%" width="100%" fill="rgb(204, 204, 204)" rx="2" ry="2" />
+    <text alignment-baseline="central" x="4.0" y="12.0" font-size="12px" fill="rgb(0,0,0)">backward</text>
+</g></svg>
+</svg>
