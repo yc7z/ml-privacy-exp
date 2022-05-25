@@ -12,4 +12,4 @@ python ./run_opacus.py \
     --momentum 0.9 \
     --max_grad_norm 1.0 \
     --weights_path ./saved_weights/mnist_LeNet_private.pth \
-    --version opacus
+    --version jax
