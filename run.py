@@ -14,10 +14,12 @@ import time
 import cProfile, pstats, io
 from pstats import SortKey
 from opacus import PrivacyEngine
+import jax
 
 timing = []
 timing_opacus = []
 timing_private = []
+timing_jax = []
 
 
 def train_vanilla(args, model, trainloader, criterion, optimizer, device):
@@ -168,6 +170,80 @@ def train_private(args, model, trainloader, criterion, optimizer, device):
     # torch.save(model.state_dict(), args.weights_path)
 
 
+def train_jax(args, model, trainloader, criterion, optimizer, device):
+    """
+    Train model in a differentially private manner by clipping the gradients and adding Gaussian noises.
+    """
+    # Build-in Python Profiler
+    pr = cProfile.Profile()
+
+    # Profiler for Tensorboard
+    # active records the rounds 
+    # prof = torch.profiler.profile(
+    #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=1, repeat=1),
+    #     on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/tensorboard1'),
+    #     record_shapes=True,
+    #     with_stack=True)
+
+    ft_compute_grad = jax.grad(compute_loss_stateless_model)
+    ft_compute_sample_grad = jax.vmap(ft_compute_grad, in_axes=(None, 0, 0, 0))
+    perex_grads = jax.jit(ft_compute_sample_grad)
+    
+    for epoch in range(args.epochs):
+        # prof.start()
+        for _, data in enumerate(trainloader):
+            inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            tic = time.perf_counter()
+            # start to monitor function call
+            pr.enable()
+            # start to monitor function call for tensorboard
+
+            # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+            grads = perex_grads(model.parameters(), inputs, targets)
+
+            # 2. clipp and noising
+            grads = batch_clip(grads, args.max_grad_norm)
+            grads = batch_noising(grads, args.max_grad_norm)
+
+            # stop to record the profiling
+            # pr.disable()
+            # prof.step()
+            
+            # toc = time.perf_counter()
+            # timing_jax.append(toc - tic)
+
+            # s = io.StringIO()
+            # sortby = SortKey.CUMULATIVE
+            # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            # ps.print_stats()
+            # pr.dump_stats("PytorchPrivateTiming,train_size=" + str(60000) + ".prof")
+
+            # 3. update model parameters with gradients
+            with torch.no_grad():
+                for param, grad_p in zip(model.parameters(), grads):
+                    param -= args.lr * torch.mean(grad_p, dim=0)
+            
+            pr.disable()
+            toc = time.perf_counter()
+            timing_jax.append(toc - tic)
+
+            # s = io.StringIO()
+            # sortby = SortKey.CUMULATIVE
+            # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            # ps.print_stats()
+            # pr.dump_stats("Private,flameresult,batch=" + str(120) + ".prof")
+        
+        # prof.stop()
+
+    
+        print(f'epoch {epoch + 1} finished.')
+    print('finished training.')
+    # torch.save(model.state_dict(), args.weights_path)
+
+
 def train_opacus(args, model, train_loader, criterion, optimizer, device):
     privacy_engine = PrivacyEngine()
 
@@ -284,6 +360,11 @@ if __name__ == "__main__":
         # print(f'raw timing info: {timing_opacus}')
         print(f'number of epochs: {args.epochs}, total training time: {sum(timing_opacus)}, dataset size: {total_size}')
         print(f'average time taken on each batch: {sum(timing_opacus) / len(timing_opacus)} (opacus)')
+    elif args.version == 'jax':
+        train_jax(args, net, trainloader, criterion, optimizer, device)
+        # print(f'raw timing info: {timing_opacus}')
+        print(f'number of epochs: {args.epochs}, total training time: {sum(timing_jax)}, dataset size: {total_size}')
+        print(f'average time taken on each batch: {sum(timing_jax) / len(timing_jax)} (opacus)')
 
     # train_vanilla(args, net, trainloader, criterion, optimizer, device)
 
