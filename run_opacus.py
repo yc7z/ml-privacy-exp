@@ -45,13 +45,14 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
             with torch.autograd.profiler.profile(use_cuda=True) as prof:
             # start to monitor function call
                 loss.backward()
+                optimizer.step()
             print(prof.key_averages().table(sort_by="cuda_time_total"))
 
 
             toc = time.perf_counter()
             pr.disable()
 
-            optimizer.step()
+            # optimizer.step()
 
             # pr.disable()
             # toc = time.perf_counter()
@@ -134,6 +135,7 @@ def train_opacus(args, model, train_loader, criterion, optimizer, device):
 
             with torch.autograd.profiler.profile(use_cuda=True) as prof:
                 loss.backward()
+                optimizer.step()
             print(prof.key_averages().table(sort_by="cuda_time_total"))
 
 
@@ -146,7 +148,7 @@ def train_opacus(args, model, train_loader, criterion, optimizer, device):
             # ps.print_stats()
             # pr.dump_stats("Opacus,flameresult,batch=" + str(args.batch_size) + ".prof")
 
-            optimizer.step()
+            # optimizer.step()
 
             # pr.disable()
             # toc = time.perf_counter()

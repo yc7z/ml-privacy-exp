@@ -5,11 +5,11 @@ then
     source $VENV_PATH
 fi
 
-python ./run.py \
+python ./run_opacus.py \
     --lr 0.004 \
-    --batch_size 100 \
+    --batch_size 150 \
     --epochs 1 \
     --momentum 0.9 \
     --max_grad_norm 1.0 \
     --weights_path ./saved_weights/mnist_LeNet_private.pth \
-    --version vanilla
+    --version opacus
