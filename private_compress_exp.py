@@ -6,9 +6,10 @@ import torch.optim as optim
 import argparse
 import models
 import matplotlib.pyplot as plt
-from privacymech import *
+from utils import *
 import numpy as np
 from torch.profiler import profile, record_function, ProfilerActivity
+from functorch import make_functional_with_buffers, vmap, grad
 
 
 
@@ -36,12 +37,52 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
             running_loss += loss
             if i % 2000 == 1999:    # print every 2000 mini-batches
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-    print('finished vanilla training.')
 
-def train_clip_grads(args, model, trainloader, criterion, optimizer, device):
+        print(f'epoch {epoch + 1} finished.')
+    print('finished vanilla training.')
+    torch.save(model.state_dict(), args.weights_path + '_vanilla' + 'ep' + str(args.epochs) + '.pth')
+
+
+def train_gaussian_mech_sgd(args, model, trainloader, criterion, device, noising=True, compress=False, accumulate_grad=False):
     """
-        Train model with each per-sample gradient clipped.
+    Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
     """
+
+    ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
+    ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
+    
+    for epoch in range(args.epochs):
+        for _, data in enumerate(trainloader):
+            inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+            fmodel, params, buffers = make_functional_with_buffers(model)
+            grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
+
+            # 2. clip, (optionally) noising, and compression
+            grads = batch_clip(grads, args.max_grad_norm)
+            if noising:
+                grads = batch_noising(grads, args.max_grad_norm)
+            if compress:
+                grads = topk_compress(grads, args.topk_percentile)
+
+            # 3. Update model parameters via gradient descent.
+            with torch.no_grad():
+                for param, grad_p in zip(model.parameters(), grads):
+                    param -= args.lr * torch.mean(grad_p, dim=0)
+    
+        print(f'epoch {epoch + 1} finished.')
+    print('finished training.')
+
+    # save trained model parameters according to the type of training conducted.
+    if noising and not compress:
+        torch.save(model.state_dict(), f'{args.weights_path},gass_sgd,epochs={args.epochs},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
+    elif noising and compress:
+        torch.save(model.state_dict(), f'{args.weights_path},gass_sgd_topk,epochs={args.epochs},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},percentile={args.topk_percentile}.pth')
+    else:
+        torch.save(model.state_dict(), f'{args.weights_path},clip_grads,epochs={args.epochs},clip={args.max_grad_norm}.pth')
 
 
 def eval_classifier(model, weights_path, testloader, classes, device):
@@ -76,9 +117,6 @@ def eval_classifier(model, weights_path, testloader, classes, device):
     print(f'Accuracy of the network on the 10000 test images: {100 * total_correct / total:2f} %')
 
 
-
-
-
 if __name__ == "__main__":
 
     # command line arguments for training. mainly hyperparameters
@@ -89,12 +127,13 @@ if __name__ == "__main__":
     parser.add_argument('--momentum', type=float, default=0.9)
     # norm threshold for clipping gradients
     parser.add_argument('--max_grad_norm', type=float, default=1.0)
-    parser.add_argument('--weights_path', type=str, default='./saved_weights/cifar_LeNet.pth')
+    parser.add_argument('--weights_path', type=str, default='./saved_weights/MNIST_LeNet')
     parser.add_argument('--noise_multiplier', type=float, default=0.3)
     parser.add_argument('--epsilon', type=float, default=0.1)
     parser.add_argument('--delta', type=float, default=0.1)
     parser.add_argument('--version', type=str, default='vanilla')
     parser.add_argument('--eval', type=bool, default=False)
+    parser.add_argument('--topk_percentile', type=float, default=0.005)
 
     args = parser.parse_args()
 
