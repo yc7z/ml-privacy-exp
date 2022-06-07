@@ -57,7 +57,44 @@ def batch_clip(grads, max_norm):
 
     return clipped_grads
 
+
 def batch_noising(grads, clip, stddev=1.0, noise_multiplier=0.3):
     for grad_p in grads:
         grad_p += noise_multiplier * clip * stddev * torch.randn(size=grad_p.size())
     return grads
+
+
+def topk_compress_single(grad_p, percentile):
+    """
+    Perform (simulated) topk compression on a single tensor.
+    
+    grad_p: the tensor to be compressed.
+    percentile: the percentage of indices that will be maintained.
+    
+    return: a tensor with the same shape as grad_p, but all except the top percentile indices are filled
+    with zeros.
+    """
+    grad_p_flat = grad_p.flatten()
+    k = int(len(grad_p_flat) * percentile)
+    topk_vals, topk_inds = torch.topk(input=torch.abs(grad_p_flat), k=k)
+    mask = torch.zeros(size=grad_p_flat.shape)
+    mask.scatter_(0, index=topk_inds, src=1, reduce='add')
+    return torch.multiply(mask, grad_p_flat).reshape(shape=grad_p.shape)
+
+
+def topk_compress(grads, percentile):
+    compressed_grads = []
+    for grad_p in grads:
+        compressed_grads.append(topk_compress_single(grad_p, percentile))
+    return compressed_grads
+        
+
+# def reconstruct(topk_val, topk_ind, origin_shape):
+#     """
+#     Given the top_k values, corresponding indices, reconstruct the tensor that has the origin_shape,
+#     where indices not in topk_ind are filled with zeros.
+#     """
+#     pass
+
+
+
