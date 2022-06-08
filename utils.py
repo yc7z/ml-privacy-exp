@@ -49,7 +49,7 @@ def batch_clip(grads, max_norm):
         grad_p_flat = grad_p.view(batch_size, -1)
         grad_norms.append(torch.norm(grad_p_flat, dim=1))
     grad_norms = torch.stack(grad_norms, dim=1)
-    ones = torch.ones(size=grad_norms.size())
+    ones = torch.ones(size=grad_norms.size()).to(grad_norms.get_device())
     scale_factors = torch.maximum(grad_norms / max_norm, ones)
     
     clipped_grads = [ torch.einsum("i...,i->i...", grads[k], scale_factors[:,k]) for k in range(len(grads)) ]
@@ -59,7 +59,7 @@ def batch_clip(grads, max_norm):
 
 def batch_noising(grads, clip, stddev=1.0, noise_multiplier=0.3):
     for grad_p in grads:
-        grad_p += noise_multiplier * clip * stddev * torch.randn(size=grad_p.size())
+        grad_p += noise_multiplier * (clip**2) * (stddev**2) * torch.randn(size=grad_p.size()).to(grad_p.get_device())
     return grads
 
 
@@ -76,8 +76,8 @@ def topk_compress_single(grad_p, percentile):
     grad_p_flat = grad_p.flatten()
     k = int(len(grad_p_flat) * percentile)
     topk_vals, topk_inds = torch.topk(input=torch.abs(grad_p_flat), k=k)
-    mask = torch.zeros(size=grad_p_flat.shape)
-    mask.scatter_(0, index=topk_inds, src=1, reduce='add')
+    mask = torch.zeros(size=grad_p_flat.shape).to(topk_inds.get_device())
+    mask.scatter_(0, topk_inds, 1, reduce='add')
     return torch.multiply(mask, grad_p_flat).reshape(shape=grad_p.shape)
 
 
@@ -94,7 +94,7 @@ def init_accumulation(grads):
     """
     accumulation = []
     for grad_p in grads:
-        accumulation.append(torch.zeros(size=grad_p.shape))
+        accumulation.append(torch.zeros(grad_p.shape).to(grad_p.get_device()))
     return accumulation
         
 
