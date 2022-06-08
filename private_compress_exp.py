@@ -43,16 +43,16 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
     torch.save(model.state_dict(), args.weights_path + '_vanilla' + 'ep' + str(args.epochs) + '.pth')
 
 
-def train_gaussian_mech_sgd(args, model, trainloader, criterion, device, noising=True, compress=False, accumulate_grad=False):
+def train_exp(args, model, trainloader, criterion, device):
     """
     Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
     """
 
     ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
     ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
-    
+
     for epoch in range(args.epochs):
-        for _, data in enumerate(trainloader):
+        for i, data in enumerate(trainloader):
             inputs, targets = data
             inputs = inputs.to(device)
             targets = targets.to(device)
@@ -61,12 +61,15 @@ def train_gaussian_mech_sgd(args, model, trainloader, criterion, device, noising
             fmodel, params, buffers = make_functional_with_buffers(model)
             grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
 
-            # 2. clip, (optionally) noising, and compression
-            grads = batch_clip(grads, args.max_grad_norm)
-            if noising:
+            # 2. (optionally) clip, noising, and compress
+            if args.clip:
+                grads = batch_clip(grads, args.max_grad_norm)
+            if args.noising:
                 grads = batch_noising(grads, args.max_grad_norm)
-            if compress:
+            if args.compress:
                 grads = topk_compress(grads, args.topk_percentile)
+            if args.accumulate_grad:
+                pass
 
             # 3. Update model parameters via gradient descent.
             with torch.no_grad():
@@ -77,9 +80,9 @@ def train_gaussian_mech_sgd(args, model, trainloader, criterion, device, noising
     print('finished training.')
 
     # save trained model parameters according to the type of training conducted.
-    if noising and not compress:
+    if args.noising and not args.compress:
         torch.save(model.state_dict(), f'{args.weights_path},gass_sgd,epochs={args.epochs},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
-    elif noising and compress:
+    elif args.noising and args.compress:
         torch.save(model.state_dict(), f'{args.weights_path},gass_sgd_topk,epochs={args.epochs},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},percentile={args.topk_percentile}.pth')
     else:
         torch.save(model.state_dict(), f'{args.weights_path},clip_grads,epochs={args.epochs},clip={args.max_grad_norm}.pth')
@@ -140,9 +143,7 @@ if __name__ == "__main__":
      # prepare training & testing data
     transform = transforms.Compose(
     [
-        # transforms.Resize((32, 32)),
         transforms.ToTensor()
-    # ,transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
     trainset = torchvision.datasets.MNIST(root='./datasets', train=True,
@@ -155,8 +156,6 @@ if __name__ == "__main__":
     testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
                                             shuffle=False)
 
-    # classes = ('plane', 'car', 'bird', 'cat',
-    #         'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
     classes = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
     USE_CUDA = torch.cuda.is_available()

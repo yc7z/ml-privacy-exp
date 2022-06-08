@@ -86,6 +86,16 @@ def topk_compress(grads, percentile):
     for grad_p in grads:
         compressed_grads.append(topk_compress_single(grad_p, percentile))
     return compressed_grads
+
+
+def init_accumulation(grads):
+    """
+    create a list of zero tensors, where each has the same shape as its corresponding element in grads.
+    """
+    accumulation = []
+    for grad_p in grads:
+        accumulation.append(torch.zeros(size=grad_p.shape))
+    return accumulation
         
 
 
