@@ -10,6 +10,8 @@ from utils import *
 import numpy as np
 from torch.profiler import profile, record_function, ProfilerActivity
 from functorch import make_functional_with_buffers, vmap, grad
+import os
+import pickle
 
 
 
@@ -90,27 +92,29 @@ def train_exp(args, model, trainloader, criterion, device):
 
         # save trained model parameters according to the type of training conducted.
         if not args.noising and not args.compress and not args.clip and not args.accumulate_grad: 
-            # vanilla
+            # vanilla.
             torch.save(model.state_dict(), f'{args.weights_path}/vanilla/epochs={epoch}.pth')
 
         elif args.clip and not args.noising and not args.compress and not args.accumulate_grad: 
-            # vanilla except clipping gradients.
+            # vanilla + clipping gradients.
             torch.save(model.state_dict(), f'{args.weights_path}/clip_grads/epochs={epoch},clip={args.max_grad_norm}.pth')
 
         elif args.compress and not args.clip and not args.noising and not args.accumulate_grad:
-            # vanilla + top_k compression
+            # vanilla + top_k compression.
             torch.save(model.state_dict(), f'{args.weights_path}/vanilla_topk/epochs={epoch},percentile={args.topk_percentile}.pth')
 
         elif args.noising and args.clip and not args.compress and not args.accumulate_grad:
-            # private sgd via gaussian mechanism, no compression
+            # private sgd via gaussian mechanism, no compression.
             torch.save(model.state_dict(), f'{args.weights_path}/gauss_sgd/epochs={epoch},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
 
         elif args.noising and args.compress and args.clip and not args.accumulate_grad:
-            # private sgd and top_k compression
+            # private sgd + top_k compression.
             torch.save(model.state_dict(), f'{args.weights_path}/gauss_sgd_topk/epochs={epoch},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},percentile={args.topk_percentile}.pth')
 
         elif args.noising and args.compress and args.clip and args.accumulate_grad:
+            # private sgd + top_k compression + gradient accumulation.
             torch.save(model.state_dict(), f'{args.weights_path}/gauss_sgd_topk_accum/epochs={epoch},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},percentile={args.topk_percentile},accumelate_period={args.accum_period}.pth')
+        
 
     print('finished training.')
 
@@ -144,8 +148,26 @@ def eval_classifier(model, weights_path, testloader, classes, device):
         total_correct += correct_count
         total += total_pred[classname]
     
-    print(f'Accuracy of the network on the 10000 test images: {100 * total_correct / total:2f} %')
+    acc = total_correct / total
+    
+    print(f'Accuracy of the network on the 10000 test images: {100 * acc:2f} %')
+    return acc
 
+
+def get_test_accuracy(directory_str, model, testloader, classes, device):
+    """
+        obtain accuracy of model after each epoch completes.
+    """
+    directory = os.fsencode(directory_str)
+    accuracy_by_epoch = []
+    files = os.listdir(directory)
+    files.sort(key=lambda x: os.stat(os.path.join(directory, x)).st_ctime)
+    for file in files:
+        filename = os.fsdecode(file)
+        print(filename)
+        weights_path = directory_str + '/' + filename
+        accuracy_by_epoch.append(eval_classifier(model, weights_path, testloader, classes, device))
+    return accuracy_by_epoch
 
 if __name__ == "__main__":
 
@@ -160,7 +182,6 @@ if __name__ == "__main__":
     
     parser.add_argument('--weights_path', type=str, default='./weights_by_epochs')
     parser.add_argument('--noise_multiplier', type=float, default=0.3)
-    parser.add_argument('--eval', type=bool, default=False)
     parser.add_argument('--topk_percentile', type=float, default=0.005)
 
     # accumulate gradient every accum_period minibatches.
@@ -171,6 +192,9 @@ if __name__ == "__main__":
     parser.add_argument('--noising', type=bool, default=False)
     parser.add_argument('--compress', type=bool, default=False)
     parser.add_argument('--accumulate_grad', type=bool, default=False)
+
+    # whether we run training or evaluating trained model on test data.
+    parser.add_argument('--eval', type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -195,7 +219,7 @@ if __name__ == "__main__":
     USE_CUDA = torch.cuda.is_available()
     device = torch.device("cuda" if USE_CUDA else "cpu")
     print(f'training device: {device}')
-    print(len(trainloader))
+    print(f'training set size: {len(trainloader)}')
     
     
     net = models.LeNet(10, input_channel=1)
@@ -203,5 +227,24 @@ if __name__ == "__main__":
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     optimizer = optim.SGD(params=net.parameters(), lr=args.lr, momentum=args.momentum)
 
+    if not args.eval:
+        train_exp(args, net, trainloader, criterion, device)
+    else:
 
-    train_exp(args, net, trainloader, criterion, device)
+        weights_dir = {
+            'vanilla': './weights_by_epochs/vanilla',
+            'vanilla_topk': './weights_by_epochs/vanilla_topk',
+            # 'clip_grads': './weights_by_epochs/clip_grads',
+            'gauss_sgd': './weights_by_epochs/gauss_sgd',
+            'gauss_sgd_topk': './weights_by_epochs/gauss_sgd_topk',
+            'gauss_sgd_topk_accum': './weights_by_epochs/gauss_sgd_topk_accum'   
+        }
+
+        indexed_mode = ['vanilla', 'vanilla_topk', 'clip_grads', 'gauss_sgd', 'gauss_sgd_topk',  'gauss_sgd_topk_accum', ]
+        indexed_mode = ['vanilla', 'vanilla_topk', 'gauss_sgd', 'gauss_sgd_topk',  'gauss_sgd_topk_accum', ]
+
+        for i in range(len(indexed_mode)):
+            model_acc = get_test_accuracy(weights_dir[indexed_mode[i]], net, testloader, classes, device)
+            with open('./accuracy_results/' + indexed_mode[i], 'wb') as fp:
+                pickle.dump(model_acc, fp)
+            fp.close()
