@@ -34,15 +34,11 @@ def train_vanilla(args, model, trainloader, criterion, optimizer, device):
             optimizer.step()
 
             running_loss += loss
-            if i % 2000 == 1999:    # print every 2000 mini-batches
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-
-            # save the weights for later
-            # torch.save(model.state_dict(), f'{args.weights_path}/vanilla/vanilla,epochs={epoch},batch={i}.pth')
+            if i % 50 == 0:    # save weights every 50 mini-batches
+                torch.save(model.state_dict(), f'{args.weights_path}/vanilla/vanilla,epochs={epoch},batch={i}.pth')
 
         print(f'epoch {epoch + 1} finished.')
     print('finished vanilla training.')
-    torch.save(model.state_dict(), './vanilla_sgd_5_epochs.pth')
 
 
 def train_private(args, model, trainloader, criterion, device):
@@ -80,12 +76,12 @@ def train_private(args, model, trainloader, criterion, device):
                 for param, grad_p_b in zip(model.parameters(), batch_grads):
                     param -= args.lr * grad_p_b
             
-            # torch.save(model.state_dict(), f'{args.weights_path}/private_sgd/private_sgd,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
+            if i % 50 == 0:
+                torch.save(model.state_dict(), f'{args.weights_path}/private_sgd/private_sgd,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
 
         print(f'epoch {epoch} finished.')
 
     print('finished training.')
-    torch.save(model.state_dict(), './private_sgd_5_epochs.pth')
 
 
 def train_private_naive_momentum(args, model, trainloader, criterion, device):
@@ -123,7 +119,7 @@ def train_private_naive_momentum(args, model, trainloader, criterion, device):
                 grad_accumulation = init_accumulation(batch_grads)
             
             for j in range(len(batch_grads)):
-                    grad_accumulation[j] += batch_grads[j]
+                    grad_accumulation[j] += batch_grads[j].data
 
             # 6. Update model parameters via gradient descent as usual.
             with torch.no_grad():
@@ -135,11 +131,117 @@ def train_private_naive_momentum(args, model, trainloader, criterion, device):
                     for param, grad_accum in zip(model.parameters(), grad_accumulation):
                         param -= (args.lr / args.accum_period) * grad_accum
             
-            # torch.save(model.state_dict(), f'{args.weights_path}/private_naive_momentum/naive_momentum,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},accumu_period={args.accum_period}.pth')
+            if i % 50 == 0:
+                torch.save(model.state_dict(), f'{args.weights_path}/private_naive_momentum/naive_momentum,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},accumu_period={args.accum_period}.pth')
 
         print(f'epoch {epoch} finished.')
     print('finished training.')
-    torch.save(model.state_dict(), './naive_moment_5_epochs.pth')
+
+
+def train_nonperiodic_momentum(args, model, trainloader, criterion, device):
+    """
+    Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
+    """
+
+    ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
+    ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
+
+    print('start training: nonperiodic momentum (private).')
+    for epoch in range(1, args.epochs + 1):
+        for i, data in enumerate(trainloader):
+            inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+            fmodel, params, buffers = make_functional_with_buffers(model)
+            grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
+
+            # 2. clip each per-sample gradient
+            grads = batch_clip(grads, args.max_grad_norm)
+
+            # 3. take mean of grads over a batch
+            batch_grads = []
+            for grad_p in grads:
+                batch_grads.append(torch.mean(grad_p, dim=0))
+            
+            # 4. add gaussian noise
+            batch_grads = batch_noising(batch_grads, clip=args.max_grad_norm, noise_multiplier=args.noise_multiplier)
+
+            # 5. initialize the gradient momentum.
+            if i == 0:
+                grad_accumulation = init_accumulation(batch_grads)
+                num_accum = 0
+
+            for j in range(len(batch_grads)):
+                grad_accumulation[j] = (grad_accumulation[j] * num_accum + batch_grads[j].data) / (num_accum + 1)
+            num_accum += 1
+
+            # 6. Update model parameters via gradient descent as usual.
+            with torch.no_grad():
+                for param, grad_p_b, grad_accum in zip(model.parameters(), batch_grads, grad_accumulation):
+                    param -= args.lr * (0.5 * grad_p_b + (0.5 / num_accum) * grad_accum)
+            
+            if i % 50 == 0:
+                torch.save(model.state_dict(), f'{args.weights_path}/np_momentum/np_momentum,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
+
+            del grads
+            del batch_grads
+
+        print(f'epoch {epoch} finished.')
+    print('finished training.')
+
+
+def train_torch_momentum(args, model, trainloader, criterion, device):
+    """
+    Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
+    """
+
+    ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
+    ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
+
+    print('start training: torch momentum (private).')
+    for epoch in range(1, args.epochs + 1):
+        for i, data in enumerate(trainloader):
+            inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+            fmodel, params, buffers = make_functional_with_buffers(model)
+            grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
+
+            # 2. clip each per-sample gradient
+            grads = batch_clip(grads, args.max_grad_norm)
+
+            # 3. take mean of grads over a batch
+            batch_grads = []
+            for grad_p in grads:
+                batch_grads.append(torch.mean(grad_p, dim=0))
+            
+            # 4. add gaussian noise
+            batch_grads = batch_noising(batch_grads, clip=args.max_grad_norm, noise_multiplier=args.noise_multiplier)
+
+            # 5. initialize the gradient momentum.
+            if i == 0:
+                grad_velocity = init_accumulation(batch_grads)
+
+            for j in range(len(batch_grads)):
+                grad_velocity[j] = grad_velocity[j] * args.momentum + batch_grads[j].data
+
+            # 6. Update model parameters via gradient descent as usual.
+            with torch.no_grad():
+                for param, grad_v in zip(model.parameters(), grad_velocity):
+                    param -= args.lr * grad_v
+            
+            if i % 50 == 0:
+                torch.save(model.state_dict(), f'{args.weights_path}/torch_momentum/torch_momentum,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier},momentum={args.momentum}.pth')
+
+            del grads
+            del batch_grads
+
+        print(f'epoch {epoch} finished.')
+    print('finished training.')
 
 
 def eval_classifier(model, weights_path, testloader, device):
@@ -247,26 +349,28 @@ if __name__ == "__main__":
     if not args.eval:
         if args.mode == 'vanilla':
             train_vanilla(args, net, trainloader, criterion, optimizer, device)
-            eval_classifier(net, './vanilla_sgd_5_epochs.pth', testloader, device)
         elif args.mode == 'private_sgd':
             train_private(args, net, trainloader, criterion, device)
-            eval_classifier(net, './private_sgd_5_epochs.pth', testloader, device)
-            print(f'noise multiplier = {args.noise_multiplier}')
         elif args.mode == 'private_naive_momentum':
             train_private_naive_momentum(args, net, trainloader, criterion, device)
-            eval_classifier(net, './naive_moment_5_epochs.pth', testloader, device)
+        elif args.mode == 'np_momentum':
+            train_nonperiodic_momentum(args, net, trainloader, criterion, device)
+        elif args.mode == 'torch_momentum':
+            train_torch_momentum(args, net, trainloader, criterion, device)
         
     else:
 
         weights_dir = {
-            'vanilla': f'{args.weights_path}/vanilla',
+            # 'vanilla': f'{args.weights_path}/vanilla',
             'private_sgd': f'{args.weights_path}/private_sgd',
-            'private_naive_momentum': f'{args.weights_path}/private_naive_momentum'
+            # 'private_naive_momentum': f'{args.weights_path}/private_naive_momentum'
+            # 'np_momentum': f'{args.weights_path}/np_momentum_noise=1_8',
+            # 'torch_momentum': f'{args.weights_path}/torch_momentum'
         }
 
         for mode_name, target_path in weights_dir.items():
             model_acc = get_test_accuracy(target_path, net, testloader, device)
             with open(args.acc_path + '/' + mode_name, 'wb') as fp:
                 pickle.dump(model_acc, fp)
-                print(f'accuracy results saved to {target_path}')
+                print(f'accuracy results saved to {args.acc_path}/{mode_name}')
             fp.close()
