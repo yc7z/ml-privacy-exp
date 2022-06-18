@@ -362,9 +362,9 @@ if __name__ == "__main__":
 
         weights_dir = {
             # 'vanilla': f'{args.weights_path}/vanilla',
-            'private_sgd': f'{args.weights_path}/private_sgd',
+            # 'private_sgd': f'{args.weights_path}/private_sgd',
             # 'private_naive_momentum': f'{args.weights_path}/private_naive_momentum'
-            # 'np_momentum': f'{args.weights_path}/np_momentum_noise=1_8',
+            'np_momentum': f'{args.weights_path}/np_momentum',
             # 'torch_momentum': f'{args.weights_path}/torch_momentum'
         }
 
