@@ -180,7 +180,9 @@ def train_nonperiodic_momentum(args, model, trainloader, criterion, device):
             # 6. Update model parameters via gradient descent as usual.
             with torch.no_grad():
                 for param, grad_p_b, grad_accum in zip(model.parameters(), batch_grads, grad_accumulation):
-                    param -= args.lr * (0.5 * grad_p_b + (0.5 / num_accum) * grad_accum)
+                    # param -= args.lr * (0.5 * grad_p_b + (0.5 / num_accum) * grad_accum)
+                    param -= args.lr * (0.5 * grad_p_b + 0.5 * grad_accum)
+
             
             if i % 50 == 0:
                 torch.save(model.state_dict(), f'{args.weights_path}/np_momentum/np_momentum,epochs={epoch},batch={i},clip={args.max_grad_norm},noise_mult={args.noise_multiplier}.pth')
@@ -362,9 +364,9 @@ if __name__ == "__main__":
 
         weights_dir = {
             # 'vanilla': f'{args.weights_path}/vanilla',
-            # 'private_sgd': f'{args.weights_path}/private_sgd',
+            'private_sgd': f'{args.weights_path}/private_sgd',
             # 'private_naive_momentum': f'{args.weights_path}/private_naive_momentum'
-            'np_momentum': f'{args.weights_path}/np_momentum',
+            # 'np_momentum': f'{args.weights_path}/np_momentum',
             # 'torch_momentum': f'{args.weights_path}/torch_momentum'
         }
 
