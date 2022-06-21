@@ -60,19 +60,19 @@ def train_private(args, model, trainloader, criterion, device):
             fmodel, params, buffers = make_functional_with_buffers(model)
             grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
 
-            # 2. clip each per-sample gradient
-            grads = batch_clip(grads, args.max_grad_norm)
-
-            # 3. take mean of grads over a batch
-            batch_grads = []
-            for grad_p in grads:
-                batch_grads.append(torch.mean(grad_p, dim=0))
-            
-            # 4. add gaussian noise
-            batch_grads = batch_noising(batch_grads, clip=args.max_grad_norm, noise_multiplier=args.noise_multiplier)
-
-            # 5. Update model parameters via gradient descent.
             with torch.no_grad():
+                # 2. clip each per-sample gradient
+                grads = batch_clip(grads, args.max_grad_norm)
+
+                # 3. take mean of grads over a batch
+                batch_grads = []
+                for grad_p in grads:
+                    batch_grads.append(torch.mean(grad_p, dim=0))
+            
+                # 4. add gaussian noise
+                batch_grads = batch_noising(batch_grads, clip=args.max_grad_norm, noise_multiplier=args.noise_multiplier)
+
+                # 5. Update model parameters via gradient descent.
                 for param, grad_p_b in zip(model.parameters(), batch_grads):
                     param -= args.lr * grad_p_b
             
@@ -157,31 +157,34 @@ def train_nonperiodic_momentum(args, model, trainloader, criterion, device):
             fmodel, params, buffers = make_functional_with_buffers(model)
             grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
 
-            # 2. clip each per-sample gradient
-            grads = batch_clip(grads, args.max_grad_norm)
-
-            # 3. take mean of grads over a batch
-            batch_grads = []
-            for grad_p in grads:
-                batch_grads.append(torch.mean(grad_p, dim=0))
-            
-            # 4. add gaussian noise
-            batch_grads = batch_noising(batch_grads, clip=args.max_grad_norm, noise_multiplier=args.noise_multiplier)
-
-            # 5. initialize the gradient momentum.
-            if i == 0:
-                grad_accumulation = init_accumulation(batch_grads)
-                num_accum = 0
-
-            for j in range(len(batch_grads)):
-                grad_accumulation[j] = (grad_accumulation[j] * num_accum + batch_grads[j].data) / (num_accum + 1)
-            num_accum += 1
-
-            # 6. Update model parameters via gradient descent as usual.
             with torch.no_grad():
+                # 2. clip each per-sample gradient
+                grads = batch_clip(grads, args.max_grad_norm)
+
+                # 3. take mean of grads over a batch
+                batch_grads = []
+                for grad_p in grads:
+                    batch_grads.append(torch.mean(grad_p, dim=0))
+                
+                # 4. add gaussian noise
+                batch_grads = batch_noising(batch_grads, clip=args.max_grad_norm, noise_multiplier=args.noise_multiplier)
+
+                # 5. initialize the gradient momentum.
+                if i == 0:
+                    grad_accumulation = init_accumulation(batch_grads)
+                    num_accum = 0
+
+                for j in range(len(batch_grads)):
+                    grad_accumulation[j] = (grad_accumulation[j] * num_accum + batch_grads[j].data) / (num_accum + 1)
+                num_accum += 1
+
+                # 6. Update model parameters via gradient descent as usual.
                 for param, grad_p_b, grad_accum in zip(model.parameters(), batch_grads, grad_accumulation):
-                    # param -= args.lr * (0.5 * grad_p_b + (0.5 / num_accum) * grad_accum)
-                    param -= args.lr * (0.5 * grad_p_b + 0.5 * grad_accum)
+                    param -= args.lr * (0.5 * grad_p_b + (0.5 / num_accum) * grad_accum)
+                    # param -= args.lr * (1 * grad_p_b + (0.0 / num_accum) * grad_accum)
+                    # param -= args.lr * (0.5 * grad_p_b + 0.0025 * grad_accum)
+                    # param -= args.lr * ((1 - 0.5 / num_accum) * grad_p_b + (0.5 / num_accum) * grad_accum)
+
 
             
             if i % 50 == 0:
@@ -315,7 +318,7 @@ if __name__ == "__main__":
     parser.add_argument('--eval', type=bool, default=False)
 
     # decide training mode
-    parser.add_argument('--mode', type=str, default='vanilla')
+    parser.add_argument('--mode', type=str, default='private_sgd')
 
     args = parser.parse_args()
 
@@ -364,9 +367,9 @@ if __name__ == "__main__":
 
         weights_dir = {
             # 'vanilla': f'{args.weights_path}/vanilla',
-            'private_sgd': f'{args.weights_path}/private_sgd',
+            # 'private_sgd': f'{args.weights_path}/private_sgd',
             # 'private_naive_momentum': f'{args.weights_path}/private_naive_momentum'
-            # 'np_momentum': f'{args.weights_path}/np_momentum',
+            'np_momentum': f'{args.weights_path}/np_momentum',
             # 'torch_momentum': f'{args.weights_path}/torch_momentum'
         }
 

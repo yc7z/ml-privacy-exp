@@ -59,7 +59,9 @@ def batch_clip(grads, max_norm):
 
 def batch_noising(grads, clip, stddev=1.0, noise_multiplier=0.3):
     for grad_p in grads:
-        grad_p += noise_multiplier * clip * stddev * torch.randn(size=grad_p.size()).to(grad_p.get_device())
+        noise = noise_multiplier * clip * stddev * torch.randn(size=grad_p.size()).to(grad_p.get_device())
+        # grad_p += noise_multiplier * clip * stddev * torch.randn(size=grad_p.size()).to(grad_p.get_device())
+        grad_p += noise.data
     return grads
 
 
