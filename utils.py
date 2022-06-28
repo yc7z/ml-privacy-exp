@@ -51,6 +51,7 @@ def batch_clip(grads, max_norm):
     grad_norms = torch.stack(grad_norms, dim=1)
     ones = torch.ones(size=grad_norms.size()).to(grad_norms.get_device())
     scale_factors = torch.maximum(grad_norms / max_norm, ones)
+    scale_factors = torch.reciprocal(scale_factors)
     
     clipped_grads = [ torch.einsum("i...,i->i...", grads[k], scale_factors[:,k]) for k in range(len(grads)) ]
 
@@ -98,7 +99,4 @@ def init_accumulation(grads):
     for grad_p in grads:
         accumulation.append(torch.zeros(grad_p.shape).to(grad_p.get_device()))
     return accumulation
-        
-
-
 
