@@ -257,33 +257,6 @@ if __name__ == "__main__":
                             
     testset = torchvision.datasets.MNIST(root='./datasets', train=False,
                                         download=True, transform=transform)
-
-    # if args.mode != 'public_aid_topk':
-    #     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
-    #                                         shuffle=True)
-    #     pub_loader = None
-    #     N = len(trainset)
-    # else:
-    #     train_subset, pub_subset = torch.utils.data.random_split(
-    #     trainset, [59400, 600], generator=torch.Generator().manual_seed(1))
-
-    #     train_loader = torch.utils.data.DataLoader(train_subset, batch_size=args.batch_size,
-    #                                         shuffle=True)
-    #     pub_loader = torch.utils.data.DataLoader(pub_subset, batch_size=args.batch_size, 
-    #                                         shuffle=True)
-    #     N = len(train_subset)
-
-    # testset = torchvision.datasets.MNIST(root='./datasets', train=False,
-    #                                     download=True, transform=transform)
-    # test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
-    #                                         shuffle=False)
-
-    # classes = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-
-
-    # USE_CUDA = torch.cuda.is_available()
-    # device = torch.device("cuda" if USE_CUDA else "cpu")
-    # print(f'training device: {device}')    
     
     for mode in ['public_aid_topk']:
         args.mode = mode
