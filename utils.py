@@ -58,12 +58,30 @@ def batch_clip(grads, max_norm):
     return clipped_grads
 
 
-def batch_noising(grads, clip, stddev=1.0, noise_multiplier=0.3):
+def batch_noising(grads, clip, noise_multiplier):
     for grad_p in grads:
-        noise = noise_multiplier * clip * stddev * torch.randn(size=grad_p.size()).to(grad_p.get_device())
-        # grad_p += noise_multiplier * clip * stddev * torch.randn(size=grad_p.size()).to(grad_p.get_device())
+        noise = noise_multiplier * clip * torch.randn(size=grad_p.size(), device=grad_p.get_device())
         grad_p += noise.data
     return grads
+
+
+def topk_mask_single(grad_p, percentile):
+    """
+    return topk mask of grad_p based on percentile.
+    """
+    grad_p_flat = grad_p.flatten()
+    k = int(len(grad_p_flat) * percentile)
+    topk_vals, topk_inds = torch.topk(input=torch.abs(grad_p_flat), k=k)
+    mask = torch.zeros(size=grad_p_flat.shape).to(topk_inds.get_device())
+    mask.scatter_(0, topk_inds, 1, reduce='add')
+    return mask.reshape(shape=grad_p.shape)
+
+
+def topk_mask_all(grads, percentile):
+    masks = []
+    for grad_p in grads:
+        masks.append(topk_mask_single(grad_p, percentile))
+    return masks
 
 
 def topk_compress_single(grad_p, percentile):
@@ -99,4 +117,3 @@ def init_accumulation(grads):
     for grad_p in grads:
         accumulation.append(torch.zeros(grad_p.shape).to(grad_p.get_device()))
     return accumulation
-

@@ -112,6 +112,43 @@ def train_gauss_sgd_topk(args, model, train_loader, criterion, device):
             model.zero_grad()
 
 
+def train_vanilla_topk(args, model, train_loader, criterion, device):
+    """
+    Vanilla Training + topk compression.
+    """
+
+    ft_compute_grad = grad(compute_loss_stateless_model, argnums=2)
+    ft_compute_sample_grad = vmap(ft_compute_grad, in_dims=(None, None, None, None, 0, 0))
+
+    model.train()
+    for i, data in enumerate(tqdm(train_loader)):
+        inputs, targets = data
+        inputs = inputs.to(device)
+        targets = targets.to(device)
+
+        # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+        fmodel, params, buffers = make_functional_with_buffers(model)
+        grads = ft_compute_sample_grad(fmodel, criterion, params, buffers, inputs, targets)
+
+        with torch.no_grad():
+
+            # 2. take mean of grads over a batch
+            batch_grads = []
+            for grad_p in grads:
+                batch_grads.append(torch.mean(grad_p, dim=0))
+                del grad_p
+
+            # 3. topk compression.
+            batch_grads = topk_compress(batch_grads, args.topk_percentile)
+
+            # 4. Update model parameters via gradient descent.
+            for param, grad_p_b in zip(model.parameters(), batch_grads):
+                param -= args.lr * grad_p_b
+                del grad_p_b
+                del param.grad
+            model.zero_grad()
+
+
 def train_public_aid_topk(args, model, train_loader, pub_loader, criterion, device):
     """
     Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
@@ -187,7 +224,13 @@ def experiment(args, model, train_loader, criterion, optimizer, device, test_loa
             accuracy = test(model, device, test_loader)
             results.append(accuracy)
     
-    if args.mode != 'vanilla':
+    elif args.mode == 'vanilla_topk':
+        for epoch in range(1, args.epochs + 1):
+            train_vanilla_topk(args, model, train_loader, criterion, device)
+            accuracy = test(model, device, test_loader)
+            results.append(accuracy)
+    
+    if args.mode != 'vanilla' or args.mode != 'vanilla_topk':
         compute_dp_sgd_privacy(N, args.batch_size, args.noise_multiplier, args.epochs, args.delta)
     
     return results
@@ -235,7 +278,7 @@ if __name__ == "__main__":
     parser.add_argument('--weights_path', type=str, default='./weights_no_compress')
     parser.add_argument('--acc_path', type=str, default='./acc_no_compress')
     parser.add_argument('--noise_multiplier', type=float, default=0.8)
-    parser.add_argument('--topk_percentile', type=float, default=0.05)
+    parser.add_argument('--topk_percentile', type=float, default=0.02)
 
     # decide training mode
     parser.add_argument('--mode', type=str, default='public_aid_topk')
@@ -258,7 +301,9 @@ if __name__ == "__main__":
     testset = torchvision.datasets.MNIST(root='./datasets', train=False,
                                         download=True, transform=transform)
     
-    for mode in ['public_aid_topk']:
+    epoch_lst = [_ for _ in range(1, args.epochs + 1)]
+    # ['public_aid_topk', 'gauss_sgd_topk', 'gauss_sgd']
+    for mode in ['vanilla_topk', 'vanilla']:
         args.mode = mode
         if args.mode != 'public_aid_topk':
             train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
@@ -294,3 +339,6 @@ if __name__ == "__main__":
         args.mode = mode
         results = experiment(args, net, train_loader, criterion, optimizer, device, test_loader, N, pub_loader)
         print(f'mode: {args.mode}, result: {results}')
+        plt.plot(epoch_lst, results, label=mode)
+    plt.legend(loc="lower right")
+    plt.savefig('./vanilla_compression_accuracies_2percent.png')
