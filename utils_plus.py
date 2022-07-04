@@ -46,4 +46,25 @@ def topk_compress(model, percentile):
         parameter.grad = torch.multiply(mask, grad_p_flat).reshape(shape=parameter.grad.shape)
 
 
+def topk_mask_single(grad_p, percentile):
+    """
+    return topk mask of grad_p based on percentile.
+    """
+    grad_p_flat = grad_p.flatten()
+    k = int(len(grad_p_flat) * percentile)
+    topk_vals, topk_inds = torch.topk(input=torch.abs(grad_p_flat), k=k)
+    mask = torch.zeros(size=grad_p_flat.shape).to(topk_inds.get_device())
+    mask.scatter_(0, topk_inds, 1, reduce='add')
+    return mask.reshape(shape=grad_p.shape)
 
+
+def topk_mask_all(grads, percentile):
+    masks = []
+    for grad_p in grads:
+        masks.append(topk_mask_single(grad_p, percentile))
+    return masks
+
+
+def apply_external_mask(model, ext_masks):
+    for parameter, mask in zip(model.parameters(), ext_masks):
+        parameter.grad = torch.multiply(mask, parameter.grad)

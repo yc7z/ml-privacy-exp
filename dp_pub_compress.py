@@ -8,8 +8,7 @@ import models
 import matplotlib.pyplot as plt
 from utils_plus import *
 import numpy as np
-from torch.profiler import profile, record_function, ProfilerActivity
-from functorch import make_functional_with_buffers, vmap, grad, make_functional
+from functorch import vmap, grad, make_functional
 import os
 import pickle
 from tensorflow_privacy.privacy.analysis.compute_dp_sgd_privacy_lib import compute_dp_sgd_privacy
@@ -29,6 +28,20 @@ def train(model, train_loader, criterion, optimizer, device, epoch):
         optimizer.step()
         losses.append(loss.item())
     print(f"Train Epoch: {epoch} \t Loss: {np.mean(losses):.6f}")
+
+
+def train_vanilla_topk(args, model, train_loader, criterion, optimizer, device):
+    model.train()
+    losses = []
+    for i, (data, target) in enumerate(tqdm(train_loader)):
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+        loss = criterion(output, target)
+        loss.backward()
+        topk_compress(model, args.topk_percentile)
+        optimizer.step()
+        losses.append(loss.item())
 
 
 def train_gauss_sgd(args, model, train_loader, criterion, optimizer, device):
@@ -70,6 +83,8 @@ def train_gauss_sgd(args, model, train_loader, criterion, optimizer, device):
 def train_gauss_sgd_topk(args, model, train_loader, criterion, optimizer, device):
     """
     Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
+
+    Additionally, perform topk compression on gradients before each GD.
     """
 
     model.train()
@@ -106,6 +121,97 @@ def train_gauss_sgd_topk(args, model, train_loader, criterion, optimizer, device
         optimizer.zero_grad()
 
 
+def train_leaky_gauss_sgd(args, model, train_loader, pub_loader, criterion, optimizer, device):
+    """
+    Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
+    Compute gradient on public data and use its topk mask to compress privatized gradient.
+    """
+    model.train()
+    for data, pub_data in zip(tqdm(train_loader), cycle(pub_loader)):
+        inputs, targets = data
+        inputs, targets = inputs.to(device), targets.to(device)
+        
+        pub_inputs, pub_targets = pub_data
+        pub_inputs, pub_targets = pub_inputs.to(device), pub_targets.to(device)
+
+        # 0. compute gradient on public data without updating it.
+        pub_loss = criterion(model(pub_inputs), pub_targets)
+        pub_grads = torch.autograd.grad(pub_loss, model.parameters())
+        pub_masks = topk_mask_all(pub_grads, args.topk_percentile)
+        model.zero_grad()
+
+        # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+        func_model, weights = make_functional(model)
+
+        def compute_loss(weights, image, label):
+            images = image.unsqueeze(0)
+            labels = label.unsqueeze(0)
+            output = func_model(weights, images)
+            loss = criterion(output, labels)
+            return loss
+        
+        sample_grads = vmap(grad(compute_loss), (None, 0, 0))(weights, inputs, targets)
+
+        for sample_grad, parameter in zip(sample_grads, model.parameters()):
+            parameter.grad_sample = sample_grad.detach()
+        
+        # 2. clip each per-sample gradient.
+        batch_clip(model, args.max_grad_norm)
+
+        # 3. noising and scale.
+        batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
+
+        # 4. perform topk compression but use the mask obtained from public gradient.
+        apply_external_mask(model, pub_masks)
+
+        optimizer.step()
+        optimizer.zero_grad()
+
+
+def train_leaky_gauss_sgd_topk(args, model, train_loader, criterion, optimizer, device):
+    """
+    Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
+    Compute gradient on public data and use its topk mask to compress privatized gradient.
+    """
+    model.train()
+    for data in tqdm(train_loader):
+        inputs, targets = data
+        inputs, targets = inputs.to(device), targets.to(device)
+
+        # 0. compute gradient on public data without updating it.
+        pub_loss = criterion(model(inputs), targets)
+        pub_grads = torch.autograd.grad(pub_loss, model.parameters())
+        pub_masks = topk_mask_all(pub_grads, args.topk_percentile)
+        model.zero_grad()
+
+        # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+        func_model, weights = make_functional(model)
+
+        def compute_loss(weights, image, label):
+            images = image.unsqueeze(0)
+            labels = label.unsqueeze(0)
+            output = func_model(weights, images)
+            loss = criterion(output, labels)
+            return loss
+        
+        sample_grads = vmap(grad(compute_loss), (None, 0, 0))(weights, inputs, targets)
+
+        for sample_grad, parameter in zip(sample_grads, model.parameters()):
+            parameter.grad_sample = sample_grad.detach()
+        
+        # 2. clip each per-sample gradient.
+        batch_clip(model, args.max_grad_norm)
+
+        # 3. noising and scale.
+        batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
+
+        # 4. perform topk compression but use the mask obtained from public gradient.
+        apply_external_mask(model, pub_masks)
+
+        optimizer.step()
+        optimizer.zero_grad()
+
+
 def experiment(args, model, train_loader, criterion, optimizer, device, test_loader, N, pub_loader=None):
     results = []
     if args.mode == 'vanilla':
@@ -126,19 +232,25 @@ def experiment(args, model, train_loader, criterion, optimizer, device, test_loa
             accuracy = test(model, device, test_loader)
             results.append(accuracy)
     
-    # elif args.mode == 'public_aid_topk':
-    #     for epoch in range(1, args.epochs + 1):
-    #         train_public_aid_topk(args, model, train_loader, pub_loader, criterion, device)
-    #         accuracy = test(model, device, test_loader)
-    #         results.append(accuracy)
+    elif args.mode == 'public_aid_topk':
+        for epoch in range(1, args.epochs + 1):
+            train_leaky_gauss_sgd(args, model, train_loader, pub_loader, criterion, optimizer, device)
+            accuracy = test(model, device, test_loader)
+            results.append(accuracy)
     
-    # elif args.mode == 'vanilla_topk':
-    #     for epoch in range(1, args.epochs + 1):
-    #         train_vanilla_topk(args, model, train_loader, criterion, device)
-    #         accuracy = test(model, device, test_loader)
-    #         results.append(accuracy)
+    elif args.mode == 'vanilla_topk':
+        for epoch in range(1, args.epochs + 1):
+            train_vanilla_topk(args, model, train_loader, criterion, optimizer, device)
+            accuracy = test(model, device, test_loader)
+            results.append(accuracy)
     
-    if args.mode != 'vanilla' or args.mode != 'vanilla_topk':
+    elif args.mode == 'leaky_gauss_sgd_topk':
+        for epoch in range(1, args.epochs + 1):
+            train_leaky_gauss_sgd_topk(args, model, train_loader, criterion, optimizer, device)
+            accuracy = test(model, device, test_loader)
+            results.append(accuracy)
+    
+    if args.mode != 'vanilla' or args.mode != 'vanilla_topk' or args.mode != 'leaky_gauss_sgd_topk':
         compute_dp_sgd_privacy(N, args.batch_size, args.noise_multiplier, args.epochs, args.delta)
     
     return results
@@ -178,7 +290,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--lr', type=float, default=0.0015)
     parser.add_argument('--batch_size', type=int, default=60)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=25)
     parser.add_argument('--momentum', type=float, default=0.9)
     # norm threshold for clipping gradients
     parser.add_argument('--max_grad_norm', type=float, default=1.0)
@@ -209,7 +321,7 @@ if __name__ == "__main__":
     
     epoch_lst = [_ for _ in range(1, args.epochs + 1)]
     # ['public_aid_topk', 'gauss_sgd_topk', 'gauss_sgd']
-    for mode in ['gauss_sgd_topk']:
+    for mode in ['leaky_gauss_sgd_topk', 'gauss_sgd_topk', 'public_aid_topk', 'gauss_sgd', 'vanilla_topk']:
         args.mode = mode
         if args.mode != 'public_aid_topk':
             train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
@@ -241,11 +353,11 @@ if __name__ == "__main__":
         net = models.SampleConvNet()
         net.to(device)
         criterion = torch.nn.CrossEntropyLoss(reduction='mean')
-        optimizer = optim.SGD(params=net.parameters(), lr=args.lr, momentum=args.momentum)
+        # optimizer = optim.SGD(params=net.parameters(), lr=args.lr, momentum=args.momentum)
+        optimizer = optim.Adam(params=net.parameters(), lr=args.lr)
         args.mode = mode
         results = experiment(args, net, train_loader, criterion, optimizer, device, test_loader, N, pub_loader)
         print(f'mode: {args.mode}, result: {results}')
         plt.plot(epoch_lst, results, label=mode)
     plt.legend(loc="lower right")
-    # plt.savefig('./vanilla_compression_accuracies_2percent.png')
-    plt.show()
+    plt.savefig('./accuracies_curves_Adam_1_percent(1).png')
