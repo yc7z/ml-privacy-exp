@@ -14,7 +14,7 @@ def batch_clip(model, max_norm):
         grad_p_flat = grad_p.view(batch_size, -1)
         grad_norms.append(torch.norm(grad_p_flat, dim=1))
     grad_norms = torch.stack(grad_norms, dim=1)
-    ones = torch.ones(size=grad_norms.size()).to(grad_norms.get_device())
+    ones = torch.ones(size=grad_norms.size(), device=grad_norms.device)
     scale_factors = torch.maximum(grad_norms / max_norm, ones)
     scale_factors = torch.reciprocal(scale_factors)
     
