@@ -1,0 +1,92 @@
+\documentclass{article}
+\usepackage{fullpage}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{polynom}
+\usepackage{amsthm}
+\usepackage{setspace}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage[a4paper, total={8in, 10in}]{geometry}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\F}{\mathbb{F}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\I}{\mathbb{I}}
+\newcommand{\J}{\mathcal{J}}
+\renewcommand{\L}{\mathcal{L}}
+\renewcommand{\S}{\mathcal{S}}
+\renewcommand{\P}{\mathcal{P}}
+\newcommand{\AND}{\text{ AND }}
+\newcommand{\der}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\diag}[1]{\text{diag}(#1)}
+\newcommand{\conj}[1]{\overline{#1}}
+\newcommand{\var}{\text{Var}}
+\newcommand{\image}[1]{\text{image}{(#1)}}
+\newcommand{\inp}[2]{\langle #1,#2 \rangle}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\renewcommand{\epsilon}{\varepsilon}
+\newcommand{\relu}{\text{ReLU}}
+\newcommand{\trace}[1]{\text{trace}\Bigl(#1\Bigr)}
+
+
+
+
+\theoremstyle{plain}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem*{lemma*}{Lemma}
+\newtheorem*{theorem*}{Theorem}
+\date{}
+\author{}
+\lstdefinestyle{mystyle}
+{
+    basicstyle=\sffamily\normalsize,
+    numberblanklines=false,
+    language=python,
+    tabsize=4,
+	mathescape=true
+	numbers=none
+}
+
+\lstset{style=mystyle}
+
+\title{Notes for Lottery Tickets and Neural Networks}
+
+\begin{document}
+\maketitle
+    
+\doublespacing
+\section*{Timings for Ghost Clipping}
+I timed the training time spent on a single batch by different implementations of the differentially private sgd algorithm.
+
+Below are the results for a simple conv net that consists of 2 fully connected layers and 2 convolutional layers on the MNIST dataset. The batch size used is 120. The timing is the average over 500 batches.
+\begin{itemize}
+    \item functorch\_dp, 0.008851111078984104
+    \item opacus\_dp, 0.007145165540161542
+    \item mixed ghost clipping, 0.010015537165221758
+    \item ghost clipping, 0.010277516969712451
+    \item not mixed not ghost, 0.010565361546818168
+    \item public training, 0.0040898429183289405
+\end{itemize}
+
+4 convolutional layers on Cifar10, batch size = 100, seconds:
+\begin{itemize}
+    \item functorch\_dp, 0.014373262761160731
+    \item opacus\_dp, 0.008994201084831729
+    \item mixed ghost clipping, 0.014257113210158422
+    \item ghost clipping, 0.01808279032376595
+    \item not mixed not ghost, use papers authors' privacy engine:  0.014138890799833461
+    \item public, 0.00498583750706166
+\end{itemize}
+
+
+\end{document}
