@@ -38,9 +38,7 @@ def compute_loss_stateless_model (fmodel, loss_fn, params, buffers, sample, targ
 def batch_clip(grads, max_norm):
     """
     Perform clipping given the gradient per each sample and clipping threshold max_norm.
-
     grads: a tuple of gradients, where each element is the gradients of one model parameter w.r.t. all samples within a minibatch.
-
     max_norm: the threshold for clipping.
     """
     batch_size = grads[0].size(0)
