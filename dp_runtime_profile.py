@@ -63,7 +63,8 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
         prof.step()
     
     prof.stop()
-    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
     # prof.export_chrome_trace(f"./runtime_profiler_results/dp_{name}_trace.json")
 
 
