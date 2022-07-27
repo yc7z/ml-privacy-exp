@@ -11,9 +11,9 @@ from utils_plus import *
 import numpy as np
 from functorch import vmap, grad, make_functional
 from opacus import PrivacyEngine
-from tensorflow_privacy.privacy.analysis.compute_dp_sgd_privacy_lib import compute_dp_sgd_privacy
+# from tensorflow_privacy.privacy.analysis.compute_dp_sgd_privacy_lib import compute_dp_sgd_privacy
 from tqdm import tqdm
-import private_CNN
+# import private_CNN
 import time
 from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -24,15 +24,20 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
     """
     model.train()
     name = model.get_name()
-    prof = profile(
-            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=100),
-            on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./dp_log/{name}'),
-            activities=[ProfilerActivity.CUDA], 
-            record_shapes=True
-            )
-    
+    prof = torch.profiler.profile(
+        activities=[
+        torch.profiler.ProfilerActivity.CPU,
+        torch.profiler.ProfilerActivity.CUDA],
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./funct_dp_log/{name}'),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True
+    )
     prof.start()
     for i, data in enumerate(tqdm(trainloader)):
+        if i > (1 + 1 + 3) * 4:
+            break
         inputs, targets = data
         inputs = inputs.to(device)
         targets = targets.to(device)
@@ -46,7 +51,7 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
             output = func_model(weights, images)
             loss = criterion(output, labels)
             return loss
-      
+    
         sample_grads = vmap(grad(compute_loss), (None, 0, 0))(weights, inputs, targets)
 
         for sample_grad, parameter in zip(sample_grads, model.parameters()):
@@ -61,9 +66,7 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
         optimizer.step()
         optimizer.zero_grad()
         prof.step()
-    
     prof.stop()
-    # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
     print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
     # prof.export_chrome_trace(f"./runtime_profiler_results/dp_{name}_trace.json")
 
@@ -91,10 +94,22 @@ def train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, de
 
 
 def train_private_opacus(args, model, trainloader, criterion, optimizer, device):
-    opacus_timing = []
     model.train()
+    name = args.model_name
+    prof = torch.profiler.profile(
+            activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./opacus_dp_log/{name}'),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True
+        )
+    prof.start()
     for batch_idx, (images, target) in enumerate(tqdm(trainloader)):
-        batch_start_time = time.perf_counter()
+        if batch_idx > (1 + 1 + 3) * 4:
+            break
         images = images.to(device)
         target = target.to(device)
 
@@ -109,16 +124,30 @@ def train_private_opacus(args, model, trainloader, criterion, optimizer, device)
         # epoch to ensure we start the next epoch with a clean state
         optimizer.step()
         optimizer.zero_grad()
-        batch_end_time = time.perf_counter()
-        opacus_timing.append(batch_end_time - batch_start_time)
-    return np.mean(opacus_timing)
+
+        prof.step()
+    prof.stop()
+    print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
+
 
 
 def train_public(model, trainloader, criterion, optimizer, device):
-    public_timing = []
     model.train()
+    name = model.get_name()
+    prof = torch.profiler.profile(
+            activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./public_log/{name}'),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True
+        )
+    prof.start()
     for batch_idx, (images, target) in enumerate(tqdm(trainloader)):
-        batch_start_time = time.perf_counter()
+        if batch_idx > (1 + 1 + 3) * 4:
+            break
         images = images.to(device)
         target = target.to(device)
 
@@ -133,9 +162,10 @@ def train_public(model, trainloader, criterion, optimizer, device):
         # epoch to ensure we start the next epoch with a clean state
         optimizer.step()
         optimizer.zero_grad()
-        batch_end_time = time.perf_counter()
-        public_timing.append(batch_end_time - batch_start_time)
-    return np.mean(public_timing)
+        prof.step()
+    prof.stop()
+    print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
+
    
 
 def test(model, device, testloader):
@@ -248,6 +278,9 @@ if __name__ == '__main__':
         "Comes at a performance cost. Opacus will emit a warning if secure rng is off,"
         "indicating that for production use it's recommender to turn it on.",
     )
+    parser.add_argument(
+        "--model_name"
+    )
 
     args = parser.parse_args()
 
@@ -279,66 +312,58 @@ if __name__ == '__main__':
     print(f'training device: {device}')
     print(f'training set size: {len(trainset)}')
 
-    # model = models.LargerConvNet(10)
-    model = models.SimpleConv()
-    # model = models.SampleConvNet()
+    model = models.LargerConvNet(10)
+    # model = models.SimpleConvNet()
     # model = models.VGG11(in_channels=3, num_classes=10)
     model.to(device)
+    model_name = model.get_name()
+    args.model_name = model_name
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
-    criterion = nn.CrossEntropyLoss()
-    # timings = []
-    # if args.mode == 'mixed_ghost':
-    #     criterion = nn.CrossEntropyLoss(reduction="none")
-    #     privacy_engine = private_CNN.PrivacyEngine(
-    #     model,
-    #     batch_size=args.batch_size,
-    #     sample_size=len(trainloader.dataset),
-    #     noise_multiplier=args.noise_multiplier,
-    #     epochs=args.epochs,
-    #     max_grad_norm=args.max_grad_norm,
-    #     ghost_clipping=False,
-    #     mixed=False
-    #     )
-    #     privacy_engine.attach(optimizer)
-    #     for epoch in range(1, args.epochs + 1):
-    #         result_timing = train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device)
-    #         timings.append(result_timing)
+    if args.mode == 'mixed_ghost':
+        # criterion = nn.CrossEntropyLoss(reduction="none")
+        # privacy_engine = private_CNN.PrivacyEngine(
+        # model,
+        # batch_size=args.batch_size,
+        # sample_size=len(trainloader.dataset),
+        # noise_multiplier=args.noise_multiplier,
+        # epochs=args.epochs,
+        # max_grad_norm=args.max_grad_norm,
+        # ghost_clipping=False,
+        # mixed=False
+        # )
+        # privacy_engine.attach(optimizer)
+        # for epoch in range(1, args.epochs + 1):
+        #     train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device)
+        pass
     
-    # elif args.mode == 'opacus_dp':
-    #     criterion = nn.CrossEntropyLoss()
-    #     privacy_engine = PrivacyEngine(
-    #         secure_mode=args.secure_rng,
-    #     )
-    #     clipping = "per_layer" if args.clip_per_layer else "flat"
-    #     model, optimizer, train_loader = privacy_engine.make_private(
-    #         module=model,
-    #         optimizer=optimizer,
-    #         data_loader=trainloader,
-    #         noise_multiplier=args.noise_multiplier,
-    #         max_grad_norm=args.max_grad_norm,
-    #         clipping=clipping,
-    #     )
-    #     for epoch in range(1, args.epochs + 1):
-    #         result_timing = train_private_opacus(args, model, trainloader, criterion, optimizer, device)
-    #         timings.append(result_timing)
+    elif args.mode == 'opacus_dp':
+        criterion = nn.CrossEntropyLoss()
+        privacy_engine = PrivacyEngine(
+            secure_mode=args.secure_rng,
+        )
+        clipping = "per_layer" if args.clip_per_layer else "flat"
+        model, optimizer, train_loader = privacy_engine.make_private(
+            module=model,
+            optimizer=optimizer,
+            data_loader=trainloader,
+            noise_multiplier=args.noise_multiplier,
+            max_grad_norm=args.max_grad_norm,
+            clipping=clipping,
+        )
+        for epoch in range(1, args.epochs + 1):
+            train_private_opacus(args, model, trainloader, criterion, optimizer, device)
 
-    # elif args.mode == 'functorch_dp':
-    #     criterion = nn.CrossEntropyLoss()
-    #     for epoch in range(1, args.epochs + 1):
-    #         result_timing = train_private_functorch(args, model, trainloader, criterion, optimizer, device)
-    #         timings.append(result_timing)
+    elif args.mode == 'functorch_dp':
+        criterion = nn.CrossEntropyLoss()
+        for epoch in range(1, args.epochs + 1):
+            train_private_functorch(args, model, trainloader, criterion, optimizer, device)
     
-    # elif args.mode == 'public':
-    #     criterion = nn.CrossEntropyLoss()
-    #     for epoch in range(1, args.epochs + 1):
-    #         result_timing = train_public(model, trainloader, criterion, optimizer, device)
-    #         timings.append(result_timing)
-
-    # print(f'{args.mode}, average timing per {args.batch_size}-sized batch: {np.mean(timings)}')
-
-    train_private_functorch(args, model, trainloader, criterion, optimizer, device)
+    elif args.mode == 'public':
+        criterion = nn.CrossEntropyLoss()
+        for epoch in range(1, args.epochs + 1):
+            train_public(model, trainloader, criterion, optimizer, device)
 
     test(model, device, testloader)
 

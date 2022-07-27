@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class SimpleConv(nn.Module):
+class SimpleConvNet(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=5)
@@ -21,6 +21,9 @@ class SimpleConv(nn.Module):
         x = F.relu(self.W2(x))
         x = F.relu(self.W3(x))
         return x
+    
+    def get_name(self):
+        return 'SimpleConvNet'
 
 class LeNet5(nn.Module):
 
@@ -100,3 +103,84 @@ class SampleConvNet(nn.Module):
 
     def name(self):
         return "SampleConvNet"
+
+
+class LargerConvNet(nn.Module):
+    def __init__(self, num_classes) -> None:
+        super().__init__()
+        self.body = nn.Sequential(
+        nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.AvgPool2d(kernel_size=2, stride=2),
+        nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.AvgPool2d(kernel_size=2, stride=2),
+        nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.AvgPool2d(kernel_size=2, stride=2),
+        nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.AdaptiveAvgPool2d((1, 1)),
+        nn.Flatten(start_dim=1, end_dim=-1),
+        nn.Linear(128, num_classes, bias=True),
+    )
+
+    def forward(self, x):
+        return self.body(x)
+    
+    def get_name(self):
+        return 'LargerConvNet'
+
+
+class VGG11(nn.Module):
+    def __init__(self, in_channels, num_classes=1000):
+        super(VGG11, self).__init__()
+        self.in_channels = in_channels
+        self.num_classes = num_classes
+        # convolutional layers 
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        # fully connected linear layers
+        self.linear_layers = nn.Sequential(
+            nn.Linear(in_features=512, out_features=4096),
+            nn.ReLU(),
+            # nn.Dropout2d(0.5),
+            # nn.Linear(in_features=4096, out_features=4096),
+            # nn.ReLU(),
+            # nn.Dropout2d(0.5),
+            nn.Linear(in_features=4096, out_features=self.num_classes)
+        )
+    def forward(self, x):
+        x = self.conv_layers(x)
+        # flatten to prepare for the fully connected layers
+        x = x.view(x.size(0), -1)
+        x = self.linear_layers(x)
+        return x
+    
+    def get_name(self):
+        return 'VGG11'
+
+
+
+
