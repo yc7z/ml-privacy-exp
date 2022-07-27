@@ -26,7 +26,6 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
     name = model.get_name()
     prof = torch.profiler.profile(
         activities=[
-        torch.profiler.ProfilerActivity.CPU,
         torch.profiler.ProfilerActivity.CUDA],
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
         on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./funct_dp_log/{name}'),
@@ -98,7 +97,6 @@ def train_private_opacus(args, model, trainloader, criterion, optimizer, device)
     name = args.model_name
     prof = torch.profiler.profile(
             activities=[
-            torch.profiler.ProfilerActivity.CPU,
             torch.profiler.ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./opacus_dp_log/{name}'),
@@ -136,7 +134,7 @@ def train_public(model, trainloader, criterion, optimizer, device):
     name = model.get_name()
     prof = torch.profiler.profile(
             activities=[
-            torch.profiler.ProfilerActivity.CPU,
+            # torch.profiler.ProfilerActivity.CPU,
             torch.profiler.ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./public_log/{name}'),
