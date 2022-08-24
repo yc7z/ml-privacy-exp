@@ -88,6 +88,17 @@ Below are the results for a simple conv net that consists of 2 fully connected l
     \item public, 0.00498583750706166
 \end{itemize}
 
+VGG11 on Cifar 10, batch size = 100
+\begin{itemize}
+    \item functorch\_dp, 0.12854671721719205
+    \item opacus\_dp, 0.08520836335443892
+    \item ghost clipping, 0.045737753581255675
+    \item mixed ghost clipping, 0.040571901844581586
+    \item not mixed not ghost, use papers authors' privacy engine, 0.07100804852251895
+    \item public, 0.007439900805708021
+\end{itemize}
+
+
 \section*{Multivariate Guassian Noise in JAX vs Pytorch}
 
 

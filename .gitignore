@@ -3,3 +3,7 @@
 *.fls
 *.log
 *.synctex.gz
+runtime_profile
+funct_dp_log
+opacus_dp_log
+public_log
