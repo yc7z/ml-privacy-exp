@@ -4,3 +4,5 @@ Various experiments for differentially private deep learning. We implemented the
 
 The experiments include running time and memory profilings, as well as accuracy results using adaptive optimization algorithms. Since differential privacy guarantee comes at the cost of increased memory usage and running time as well as degradation in testing accuracies, the main goal of these experiments was to provide insights into the reason behind the increased memory and runtime behind private SGD so they might be improved.
 
+We included implementations of the private SGD algorithm in OPACUS as well as the Functorch library that comes with PyTorch 1.12.
+
