@@ -181,10 +181,6 @@ def train_nonperiodic_momentum(args, model, trainloader, criterion, device):
                 # 6. Update model parameters via gradient descent as usual.
                 for param, grad_p_b, grad_accum in zip(model.parameters(), batch_grads, grad_accumulation):
                     param -= args.lr * (0.5 * grad_p_b + (0.5 / num_accum) * grad_accum)
-                    # param -= args.lr * (1 * grad_p_b + (0.0 / num_accum) * grad_accum)
-                    # param -= args.lr * (0.5 * grad_p_b + 0.0025 * grad_accum)
-                    # param -= args.lr * ((1 - 0.5 / num_accum) * grad_p_b + (0.5 / num_accum) * grad_accum)
-
 
             
             if i % 50 == 0:
