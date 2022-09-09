@@ -22,19 +22,21 @@ from memory_profiler import profile
 
 
 
-# @profile
 def train_private_functorch(args, model, trainloader, criterion, optimizer, device):
     """
     Train model in a differentially private manner by clipping each per-sample gradient and adding noises.
     """
     model.train()
     for i, data in enumerate(trainloader):
+        # if i > 10:
+        #     break
         inputs, targets = data
         inputs = inputs.to(device)
         targets = targets.to(device)
 
          # compute output
         output = model(inputs)
+
         loss = criterion(output, targets)
 
         # compute gradient and do SGD step
@@ -50,11 +52,12 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
             output = func_model(weights, images)
             loss = criterion(output, labels)
             return loss
-    
+
         sample_grads = vmap(grad(compute_loss), (None, 0, 0))(weights, inputs, targets)
 
         for sample_grad, parameter in zip(sample_grads, model.parameters()):
             parameter.grad_sample = sample_grad.detach()
+            # parameter.grad_sample = torch.sum(sample_grad, dim=0)
         
         # for parameter in model.parameters():
         #     parameter.grad_sample = torch.zeros(size=torch.Size([args.batch_size])+parameter.shape, dtype=torch.float, device=device)
@@ -65,27 +68,26 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
         # 3. noising and scale.
         batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
 
+
         optimizer.step()
-        optimizer.zero_grad()
-       
-        
+        optimizer.zero_grad()    
 
 
 def train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device):
     mixed_ghost_timing = []
     model.train()
-    # n_acc_steps = args.batch_size // args.mini_batch_size
+    n_acc_steps = args.batch_size // args.mini_batch_size
     for batch_idx, (inputs, targets) in enumerate(tqdm(trainloader)):
         batch_start_time = time.perf_counter()
-        # inputs, targets = inputs.to(device), targets.to(device)
+        inputs, targets = inputs.to(device), targets.to(device)
         outputs = model(inputs)
         loss = criterion(outputs, targets)
 
-        # if ((batch_idx + 1) % n_acc_steps == 0) or ((batch_idx + 1) == len(train_loader)):
-        #     optimizer.step(loss=loss)
-        #     optimizer.zero_grad()
-        # else:
-        #     optimizer.virtual_step(loss=loss)
+        if ((batch_idx + 1) % n_acc_steps == 0) or ((batch_idx + 1) == len(trainloader)):
+            optimizer.step(loss=loss)
+            optimizer.zero_grad()
+        else:
+            optimizer.virtual_step(loss=loss)
         optimizer.step(loss=loss)
         optimizer.zero_grad()
         batch_end_time = time.perf_counter()
@@ -114,7 +116,6 @@ def train_private_opacus(args, model, trainloader, criterion, optimizer, device)
 
 def train_public(model, trainloader, criterion, optimizer, device):
     model.train()
-    grad_time = 0
     for batch_idx, (images, target) in enumerate(trainloader):
         images = images.to(device)
         target = target.to(device)
@@ -124,17 +125,13 @@ def train_public(model, trainloader, criterion, optimizer, device):
         loss = criterion(output, target)
 
         # compute gradient and do SGD step
-        grad_start = time.perf_counter()
         loss.backward()
-        grad_end = time.perf_counter()
         
         # make sure we take a step after processing the last mini-batch in the
         # epoch to ensure we start the next epoch with a clean state
         optimizer.step()
         optimizer.zero_grad()
         
-        grad_time += (grad_end - grad_start)
-    return grad_time
    
 
 def test(model, device, testloader):
@@ -170,7 +167,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         "--epochs",
-        default=2,
+        default=5,
         type=int,
         metavar="N",
         help="number of total epochs to run",
@@ -179,7 +176,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "-b",
         "--batch_size",
-        default=110,
+        default=100,
         type=int,
     )
     parser.add_argument(
@@ -284,9 +281,9 @@ if __name__ == '__main__':
                                             shuffle=False)
     
 
-    # model = models.LargerConvNet(10)
+    model = models.LargerConvNet(10)
     # model = models.SimpleConvNet()
-    model = models.VGG11(in_channels=3, num_classes=10)
+    # model = models.VGG11(in_channels=3, num_classes=10)
     model.to(device)
     model_name = model.get_name()
     args.model_name = model_name
@@ -332,44 +329,25 @@ if __name__ == '__main__':
 
     elif args.mode == 'functorch_dp':
         criterion = nn.CrossEntropyLoss()
-        # total_per_sample_grad_time = 0
-        # total_clip_time = 0
-        # total_noise_time = 0
-        # total_data_batch_time = 0
-        # total_optimizer_step_time = 0
-
         start_time = time.perf_counter()
         for epoch in range(1, args.epochs + 1):
-            # per_sample_grad_time, clip_time, noise_time, data_time, opt_time = train_private_functorch(args, model, trainloader, criterion, optimizer, device)
-            # total_per_sample_grad_time += per_sample_grad_time
-            # total_clip_time += clip_time
-            # total_noise_time += noise_time
-            # total_data_batch_time += data_time
-            # total_optimizer_step_time += opt_time
             train_private_functorch(args, model, trainloader, criterion, optimizer, device)
-        end_time = time.perf_counter()
-        # print(f'total time for per sample gradient during training: {total_per_sample_grad_time}\n')
-        # print(f'total time for clipping during training: {total_clip_time}\n')
-        # print(f'total time for noising during training: {total_noise_time}\n')
-        # print(f'total time for getting data batch: {total_data_batch_time}\n')
-        # print(f'total time for optimizer step: {total_optimizer_step_time}\n')
+        end_time = time.perf_counter()        
 
     
     elif args.mode == 'public':
         criterion = nn.CrossEntropyLoss()
-        # total_grad_time = 0
         start_time = time.perf_counter()
         for epoch in range(1, args.epochs + 1):
-            grad_time = train_public(model, trainloader, criterion, optimizer, device)
-            # total_grad_time += grad_time
+            train_public(model, trainloader, criterion, optimizer, device)
         end_time = time.perf_counter()
 
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'total number of trainable parameters: {pytorch_total_params}')
     test(model, device, testloader)
-    print(f'total training time = {end_time - start_time}s\n')
+    print(f'average per epoch time: {(end_time - start_time) / args.epochs}')
+
     
-    # print(f'total gradient time: {total_grad_time}s\n')
 
 
