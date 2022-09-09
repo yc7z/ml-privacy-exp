@@ -9,8 +9,6 @@ import matplotlib.pyplot as plt
 from utils_plus import *
 import numpy as np
 from functorch import vmap, grad, make_functional
-import os
-import pickle
 from tensorflow_privacy.privacy.analysis.compute_dp_sgd_privacy_lib import compute_dp_sgd_privacy
 from tqdm import tqdm
 from itertools import cycle
