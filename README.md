@@ -14,9 +14,9 @@ Install PyTorch, Torchvision, Opacus, and TensorFlow Privacy.
 ## Usage
 
 For each of the scripts mentioned below, DP-SGD is implemented in both OPACUS and Functorch. You can toggle the flag --mode to choose which version to run:
-* --mode functorch_dp to run the functorch implementation.
-* --mode opacus to run the Opacus implementation.
-* --mode public to run public training without differential privacy.
+* ```--mode functorch_dp``` to run the functorch implementation.
+* ```--mode opacus``` to run the Opacus implementation.
+* ```--mode public``` to run public training without differential privacy.
 
 
 
