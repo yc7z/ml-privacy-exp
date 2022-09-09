@@ -25,17 +25,6 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
     """
     model.train()
     name = model.get_name()
-    # prof = torch.profiler.profile(
-    #     activities=[
-    #     torch.profiler.ProfilerActivity.CPU,
-    #     torch.profiler.ProfilerActivity.CUDA],
-    #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
-    #     on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./funct_dp_log/{name}'),
-    #     record_shapes=True,
-    #     profile_memory=True,
-    #     with_stack=True
-    # )
-    # prof.start()
     with torch.profiler.profile(
         activities=[
         torch.profiler.ProfilerActivity.CUDA],
@@ -67,41 +56,34 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
             for sample_grad, parameter in zip(sample_grads, model.parameters()):
                 parameter.grad_sample = sample_grad.detach()
             
-            # # 2. clip each per-sample gradient.
-            # batch_clip(model, args.max_grad_norm)
+            # 2. clip each per-sample gradient.
+            batch_clip(model, args.max_grad_norm)
 
-            # # 3. noising and scale.
-            # batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
+            # 3. noising and scale.
+            batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
 
-            # optimizer.step()
-            # optimizer.zero_grad()
+            optimizer.step()
+            optimizer.zero_grad()
             prof.step()
 
-    # prof.stop()
     print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
-    # prof.export_chrome_trace(f"./runtime_profiler_results/dp_{name}_trace.json")
 
 
 def train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device):
-    # mixed_ghost_timing = []
     model.train()
-    # n_acc_steps = args.batch_size // args.mini_batch_size
+    n_acc_steps = args.batch_size // args.mini_batch_size
     for batch_idx, (inputs, targets) in enumerate(tqdm(trainloader)):
-        # batch_start_time = time.perf_counter()
-        # inputs, targets = inputs.to(device), targets.to(device)
+        inputs, targets = inputs.to(device), targets.to(device)
         outputs = model(inputs)
         loss = criterion(outputs, targets)
 
-        # if ((batch_idx + 1) % n_acc_steps == 0) or ((batch_idx + 1) == len(train_loader)):
-        #     optimizer.step(loss=loss)
-        #     optimizer.zero_grad()
-        # else:
-        #     optimizer.virtual_step(loss=loss)
+        if ((batch_idx + 1) % n_acc_steps == 0) or ((batch_idx + 1) == len(trainloader)):
+            optimizer.step(loss=loss)
+            optimizer.zero_grad()
+        else:
+            optimizer.virtual_step(loss=loss)
         optimizer.step(loss=loss)
         optimizer.zero_grad()
-        # batch_end_time = time.perf_counter()
-        # mixed_ghost_timing.append(batch_end_time - batch_start_time)
-    # return np.mean(mixed_ghost_timing)
 
 
 def train_private_opacus(args, model, trainloader, criterion, optimizer, device):
@@ -289,7 +271,8 @@ if __name__ == '__main__':
         "indicating that for production use it's recommender to turn it on.",
     )
     parser.add_argument(
-        "--model_name"
+        "--model_name",
+        default='vgg11'
     )
 
     args = parser.parse_args()
@@ -300,10 +283,6 @@ if __name__ == '__main__':
         transforms.ToTensor()
     ])
 
-    # transform = transforms.Compose(
-    # [transforms.Resize((224, 224)),
-    #  transforms.ToTensor(),
-    #  transforms.Normalize(mean=(0.5), std=(0.5))])
     USE_CUDA = torch.cuda.is_available()
     device = torch.device("cuda" if USE_CUDA else "cpu")
     print(f'training device: {device}')
@@ -324,12 +303,13 @@ if __name__ == '__main__':
                                             shuffle=False)
     
 
-    model = models.LargerConvNet(10)
-    # model = models.SimpleConvNet()
-    # model = models.VGG11(in_channels=3, num_classes=10)
+    if args.model_name == 'vgg11':
+        model = models.VGG11(in_channels=3, num_classes=10)
+    elif args.model_name == 'larger_convnet':
+        model = models.LargerConvNet(10)
+    elif args.model_name == 'simple_convnet':
+        model = models.SimpleConvNet()
     model.to(device)
-    model_name = model.get_name()
-    args.model_name = model_name
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
