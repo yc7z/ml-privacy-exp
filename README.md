@@ -10,6 +10,8 @@ We included implementations of the private SGD algorithm in OPACUS as well as th
 
 We also include the implementation of DP-SGD with Jax, which was initially found from https://github.com/google/jax/blob/main/examples/differentially_private_sgd.py, with some of our modification
 
+The report of our experiment can be found in DP_SGD_Overhead_Analysis.pdf
+
 ## Requirements
 Install PyTorch, Torchvision, Opacus, and TensorFlow Privacy.
 
