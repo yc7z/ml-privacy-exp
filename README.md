@@ -8,6 +8,8 @@ The experiments include running time and memory profilings, as well as accuracy 
 
 We included implementations of the private SGD algorithm in OPACUS as well as the Functorch library that comes with PyTorch 1.12.
 
+We also include the implementation of DP-SGD with Jax, which was initially found from https://github.com/google/jax/blob/main/examples/differentially_private_sgd.py, with some of our modification
+
 ## Requirements
 Install PyTorch, Torchvision, Opacus, and TensorFlow Privacy.
 
@@ -27,4 +29,11 @@ We implemented DP-SGD is implemented in both OPACUS and Functorch. You can toggl
 * ```--mode opacus``` to run the Opacus implementation.
 * ```--mode public``` to run public training without differential privacy.
 
+
+A summary of Jax version:
+The detailed running commands can be found on the top of each Jax file.
+* ```python -m examples.differentially_private_sgd  --dpsgd=False --learning_rate=.1 --epochs=20 ``` is an example to run non-private version by setting dpsgd to False
+* ```python -m examples.differentially_private_sgd  --dpsgd=True --learning_rate=.1 --epochs=20 ``` is an example to run private version by setting dpsgd to True
+
+To profile Jax implementation using NVIDIA Nsight System, first down the GUI from https://developer.nvidia.com/nsight-systems, then follow instructions on jax/nsys.pdf to profile the training 
 
