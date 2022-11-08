@@ -37,5 +37,5 @@ The detailed running commands can be found on the top of each Jax file.
 * ```python -m examples.differentially_private_sgd  --dpsgd=False --learning_rate=.1 --epochs=20 ``` is an example to run non-private version by setting dpsgd to False
 * ```python -m examples.differentially_private_sgd  --dpsgd=True --learning_rate=.1 --epochs=20 ``` is an example to run private version by setting dpsgd to True
 
-To profile Jax implementation using NVIDIA Nsight System, first down the GUI from https://developer.nvidia.com/nsight-systems, then follow instructions on jax/nsys.pdf to profile the training 
+To profile Jax implementation using NVIDIA Nsight System, first download the GUI from https://developer.nvidia.com/nsight-systems, then follow instructions on jax/nsys.pdf to profile the training 
 
