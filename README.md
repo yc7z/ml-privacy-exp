@@ -26,7 +26,7 @@ A summary of the various scripts:
 * ```models.py``` contains the models used in our experiments. One can extends this file if one wishes to run experiments on other model architectures.
 
 
-We implemented DP-SGD is implemented in both OPACUS and Functorch. You can toggle the flag --mode to choose which version to run:
+DP-SGD is implemented in both OPACUS and Functorch. You can toggle the flag --mode to choose which version to run:
 * ```--mode functorch_dp``` to run the functorch implementation.
 * ```--mode opacus``` to run the Opacus implementation.
 * ```--mode public``` to run public training without differential privacy.
