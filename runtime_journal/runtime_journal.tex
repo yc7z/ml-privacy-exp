@@ -99,6 +99,49 @@ VGG11 on Cifar 10, batch size = 100
 \end{itemize}
 
 
+VGG11 on CIFAR10, batch size = 100, 20 epochs.
+\begin{itemize}
+    \item functorch dp: total training time = 1430.7988447240787s
+    \item public: total training time = 205.92813059699256s
+    \item opacus: total training time = 1386.7571989760036s
+\end{itemize}
+
+breakdown (functorch, GPU):
+\begin{itemize}
+    \item total training time = 1423.7334604880307s
+    \item total time for per sample gradient during training: 197.47676673321985
+    \item total time for clipping during training: 23.502324198838323
+    \item total time for noising during training: 11.241958117345348
+    \item total time for getting data batch: 1022.9345700764097
+    \item total time for optimizer step: 22.030423796037212
+\end{itemize}
+
+functorch, CPU:
+for every epoch:
+
+per sample gradient time: 2160.2697375514545s
+
+clipping time: 79.99212361080572s
+
+noising time: 41.36028096359223s
+
+data batch time: 0.0011884046252816916s
+
+optimizer step time: 7.1352214510552585s
+
+total time for per sample gradient during training: 40573.62095386046
+
+total time for clipping during training: 1569.095354638528
+
+total time for noising during training: 823.5452335844748
+
+total time for getting data batch: 0.023356984835118055
+
+total time for optimizer step: 140.10640525864437
+
+total training time = 43255.40618532291s
+
+
 \section*{Multivariate Guassian Noise in JAX vs Pytorch}
 
 
