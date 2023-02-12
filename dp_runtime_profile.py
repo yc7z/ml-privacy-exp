@@ -1,3 +1,4 @@
+from imghdr import tests
 import torch
 import torch.nn as nn
 import torch
@@ -13,7 +14,7 @@ from functorch import vmap, grad, make_functional
 from opacus import PrivacyEngine
 # from tensorflow_privacy.privacy.analysis.compute_dp_sgd_privacy_lib import compute_dp_sgd_privacy
 from tqdm import tqdm
-# import private_CNN
+import private_CNN
 import time
 from torch.profiler import profile, record_function, ProfilerActivity
 
@@ -24,7 +25,7 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
     """
     model.train()
     name = model.get_name()
-    prof = torch.profiler.profile(
+    with torch.profiler.profile(
         activities=[
         torch.profiler.ProfilerActivity.CUDA],
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
@@ -32,64 +33,57 @@ def train_private_functorch(args, model, trainloader, criterion, optimizer, devi
         record_shapes=True,
         profile_memory=True,
         with_stack=True
-    )
-    prof.start()
-    for i, data in enumerate(tqdm(trainloader)):
-        if i > (1 + 1 + 3) * 4:
-            break
-        inputs, targets = data
-        inputs = inputs.to(device)
-        targets = targets.to(device)
+    ) as prof:
+        for i, data in enumerate(trainloader):
+            if i > (1 + 1 + 3) * 4:
+                break
+            inputs, targets = data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
 
-        # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
-        func_model, weights = make_functional(model)
+            # 1. Compute the gradient w.r.t. each model parameter on each sample within a batch.
+            func_model, weights = make_functional(model)
 
-        def compute_loss(weights, image, label):
-            images = image.unsqueeze(0)
-            labels = label.unsqueeze(0)
-            output = func_model(weights, images)
-            loss = criterion(output, labels)
-            return loss
-    
-        sample_grads = vmap(grad(compute_loss), (None, 0, 0))(weights, inputs, targets)
-
-        for sample_grad, parameter in zip(sample_grads, model.parameters()):
-            parameter.grad_sample = sample_grad.detach()
+            def compute_loss(weights, image, label):
+                images = image.unsqueeze(0)
+                labels = label.unsqueeze(0)
+                output = func_model(weights, images)
+                loss = criterion(output, labels)
+                return loss
         
-        # 2. clip each per-sample gradient.
-        batch_clip(model, args.max_grad_norm)
+            sample_grads = vmap(grad(compute_loss), (None, 0, 0))(weights, inputs, targets)
 
-        # 3. noising and scale.
-        batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
+            for sample_grad, parameter in zip(sample_grads, model.parameters()):
+                parameter.grad_sample = sample_grad.detach()
+            
+            # 2. clip each per-sample gradient.
+            batch_clip(model, args.max_grad_norm)
 
-        optimizer.step()
-        optimizer.zero_grad()
-        prof.step()
-    prof.stop()
+            # 3. noising and scale.
+            batch_noising_scale(model, args.max_grad_norm, args.noise_multiplier, args.batch_size)
+
+            optimizer.step()
+            optimizer.zero_grad()
+            prof.step()
+
     print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
-    # prof.export_chrome_trace(f"./runtime_profiler_results/dp_{name}_trace.json")
 
 
 def train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device):
-    mixed_ghost_timing = []
     model.train()
-    # n_acc_steps = args.batch_size // args.mini_batch_size
+    n_acc_steps = args.batch_size // args.mini_batch_size
     for batch_idx, (inputs, targets) in enumerate(tqdm(trainloader)):
-        batch_start_time = time.perf_counter()
         inputs, targets = inputs.to(device), targets.to(device)
         outputs = model(inputs)
         loss = criterion(outputs, targets)
 
-        # if ((batch_idx + 1) % n_acc_steps == 0) or ((batch_idx + 1) == len(train_loader)):
-        #     optimizer.step(loss=loss)
-        #     optimizer.zero_grad()
-        # else:
-        #     optimizer.virtual_step(loss=loss)
+        if ((batch_idx + 1) % n_acc_steps == 0) or ((batch_idx + 1) == len(trainloader)):
+            optimizer.step(loss=loss)
+            optimizer.zero_grad()
+        else:
+            optimizer.virtual_step(loss=loss)
         optimizer.step(loss=loss)
         optimizer.zero_grad()
-        batch_end_time = time.perf_counter()
-        mixed_ghost_timing.append(batch_end_time - batch_start_time)
-    return np.mean(mixed_ghost_timing)
 
 
 def train_private_opacus(args, model, trainloader, criterion, optimizer, device):
@@ -199,7 +193,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         "--epochs",
-        default=1,
+        default=20,
         type=int,
         metavar="N",
         help="number of total epochs to run",
@@ -208,7 +202,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "-b",
         "--batch_size",
-        default=100,
+        default=2000,
         type=int,
     )
     parser.add_argument(
@@ -277,7 +271,8 @@ if __name__ == '__main__':
         "indicating that for production use it's recommender to turn it on.",
     )
     parser.add_argument(
-        "--model_name"
+        "--model_name",
+        default='vgg11'
     )
 
     args = parser.parse_args()
@@ -288,53 +283,51 @@ if __name__ == '__main__':
         transforms.ToTensor()
     ])
 
-    # transform = transforms.Compose(
-    # [transforms.Resize((224, 224)),
-    #  transforms.ToTensor(),
-    #  transforms.Normalize(mean=(0.5), std=(0.5))])
+    USE_CUDA = torch.cuda.is_available()
+    device = torch.device("cuda" if USE_CUDA else "cpu")
+    print(f'training device: {device}')
 
     trainset = torchvision.datasets.CIFAR10(root='./datasets', train=True,
-                                            download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
+                                            download=True, transform=transform,
+                                            )
+    
+    trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=args.batch_size,
+                                            pin_memory=True,
                                             shuffle=True)
 
     testset = torchvision.datasets.CIFAR10(root='./datasets', train=False,
                                         download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
+
+    testloader = torch.utils.data.DataLoader(dataset=testset, batch_size=args.batch_size, 
+                                            pin_memory=True,
                                             shuffle=False)
+    
 
-    # classes = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-
-    USE_CUDA = torch.cuda.is_available()
-    device = torch.device("cuda" if USE_CUDA else "cpu")
-    print(f'training device: {device}')
-    print(f'training set size: {len(trainset)}')
-
-    model = models.LargerConvNet(10)
-    # model = models.SimpleConvNet()
-    # model = models.VGG11(in_channels=3, num_classes=10)
+    if args.model_name == 'vgg11':
+        model = models.VGG11(in_channels=3, num_classes=10)
+    elif args.model_name == 'larger_convnet':
+        model = models.LargerConvNet(10)
+    elif args.model_name == 'simple_convnet':
+        model = models.SimpleConvNet()
     model.to(device)
-    model_name = model.get_name()
-    args.model_name = model_name
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     if args.mode == 'mixed_ghost':
-        # criterion = nn.CrossEntropyLoss(reduction="none")
-        # privacy_engine = private_CNN.PrivacyEngine(
-        # model,
-        # batch_size=args.batch_size,
-        # sample_size=len(trainloader.dataset),
-        # noise_multiplier=args.noise_multiplier,
-        # epochs=args.epochs,
-        # max_grad_norm=args.max_grad_norm,
-        # ghost_clipping=False,
-        # mixed=False
-        # )
-        # privacy_engine.attach(optimizer)
-        # for epoch in range(1, args.epochs + 1):
-        #     train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device)
-        pass
+        criterion = nn.CrossEntropyLoss(reduction="none")
+        privacy_engine = private_CNN.PrivacyEngine(
+        model,
+        batch_size=args.batch_size,
+        sample_size=len(trainloader.dataset),
+        noise_multiplier=args.noise_multiplier,
+        epochs=args.epochs,
+        max_grad_norm=args.max_grad_norm,
+        ghost_clipping=False,
+        mixed=False
+        )
+        privacy_engine.attach(optimizer)
+        for epoch in range(1, args.epochs + 1):
+            train_private_mixed_ghost(args, model, trainloader, criterion, optimizer, device)
     
     elif args.mode == 'opacus_dp':
         criterion = nn.CrossEntropyLoss()
